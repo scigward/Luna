@@ -305,6 +305,7 @@ struct TVShowSeasonsSection: View {
             
             EpisodeCell(
                 episode: episode,
+                fillerEpisodes: jikanFillerSet,
                 showId: tvShow.id,
                 progress: progress,
                 isSelected: isSelected,

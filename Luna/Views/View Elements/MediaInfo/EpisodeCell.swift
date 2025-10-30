@@ -285,5 +285,12 @@ struct EpisodeCell: View {
             seasonNumber: episode.seasonNumber,
             episodeNumber: episode.episodeNumber
         )
-    }
+    
+        .onAppear {
+            if let set = fillerEpisodes {
+                self.isFiller = set.contains(episode.episodeNumber)
+                if self.isFiller { Logger.shared.log("[Filler] Episode #\(episode.episodeNumber) marked as filler", type: "Debug") }
+            }
+        }
+}
 }
