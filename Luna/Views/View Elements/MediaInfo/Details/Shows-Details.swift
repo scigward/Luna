@@ -14,6 +14,19 @@ struct TVShowSeasonsSection: View {
     @Binding var seasonDetail: TMDBSeasonDetail?
     @Binding var selectedEpisodeForSearch: TMDBEpisode?
     let tmdbService: TMDBService
+
+    // Jikan filler set for this media (passed down to EpisodeCell)
+    @State private var jikanFillerSet: Set<Int>? = nil
+
+    // Static/shared Jikan cache & progress guards (one cache for the app to avoid duplicate/expensive fetches)
+    private static var jikanCache: [Int: (fetchedAt: Date, episodes: [JikanEpisode])] = [:]
+    private static let jikanCacheQueue = DispatchQueue(label: "sora.jikan.cache.queue", attributes: .concurrent)
+    private static let jikanCacheTTL: TimeInterval = 60 * 60 * 24 * 7 // 1 week
+    private static var inProgressMALIDs: Set<Int> = []
+    private static let inProgressQueue = DispatchQueue(label: "sora.jikan.inprogress.queue")
+
+    @State private var matchedMalID: Int? = nil
+
     
     @State private var isLoadingSeason = false
     @State private var showingSearchResults = false
@@ -350,6 +363,7 @@ struct TVShowSeasonsSection: View {
                     self.isLoadingSeason = false
                 }
             } catch {
+                        Logger.shared.log("[Filler] Decode error page #\(currentPage): \(error.localizedDescription)", type: "Error")
                 await MainActor.run {
                     self.isLoadingSeason = false
                 }
@@ -374,4 +388,161 @@ struct TVShowSeasonsSection: View {
         
         return nil
     }
+
+    // MARK: - Jikan filler implementation
+    private struct JikanResponse: Decodable {
+        let data: [JikanEpisode]
+    }
+    
+    private struct JikanEpisode: Decodable {
+        let mal_id: Int
+        let filler: Bool
+    }
+
+    private func fetchJikanFillerInfoIfNeeded() {
+        Logger.shared.log("[Filler] fetchJikanFillerInfoIfNeeded invoked", type: "Debug")
+        guard jikanFillerSet == nil else { return }
+        fetchJikanFillerInfo()
+    }
+
+    private func fetchJikanFillerInfo() {
+        Logger.shared.log("[Filler] fetchJikanFillerInfo start", type: "Debug")
+        guard let malID = matchedMalID else {
+            Logger.shared.log("[Filler] MAL ID missing — resolving via AniList", type: "Debug")
+            // Resolve via AniList using TMDB title/year
+            resolveMalIDFromTMDBForAniList()
+            return
+        }
+
+        // Check cache first
+        var cachedEpisodes: [JikanEpisode]? = nil
+        Self.jikanCacheQueue.sync {
+            if let entry = Self.jikanCache[malID], Date().timeIntervalSince(entry.fetchedAt) < Self.jikanCacheTTL {
+                cachedEpisodes = entry.episodes
+            }
+        }
+        if let episodes = cachedEpisodes {
+            Logger.shared.log("[Filler] Cache hit for MAL ID: \(malID) episodes=\(episodes.count)", type: "Debug")
+            updateFillerSet(episodes: episodes)
+            return
+        }
+        
+        Logger.shared.log("[Filler] Cache miss for MAL ID: \(malID)", type: "Debug")
+        // Prevent duplicate requests
+        var shouldFetch = false
+        Self.inProgressQueue.sync {
+            if !Self.inProgressMALIDs.contains(malID) {
+                Self.inProgressMALIDs.insert(malID)
+                shouldFetch = true
+            }
+        }
+        
+        if !shouldFetch {
+            Logger.shared.log("[Filler] Fetch already in progress for MAL ID: \(malID) — skipping", type: "Debug")
+            return
+        }
+        
+        Logger.shared.log("[Filler] Fetching Jikan pages for MAL ID: \(malID)", type: "Debug")
+        // Fetch all pages
+        fetchAllJikanPages(malID: malID) { episodes in
+            // store in cache
+            if let eps = episodes {
+                Logger.shared.log("[Filler] Jikan fetch completed for MAL ID: \(malID) totalEpisodes=\(eps.count)", type: "Debug")
+                Self.jikanCacheQueue.async(flags: .barrier) {
+                    Self.jikanCache[malID] = (Date(), eps)
+                }
+            }
+            // reset in-progress
+            Self.inProgressQueue.sync {
+                Self.inProgressMALIDs.remove(malID)
+            }
+            DispatchQueue.main.async {
+            if let mal = bestMal { Logger.shared.log("[Filler] AniList matched MAL=\(mal) score=\(bestScore)", type: "Debug") } else { Logger.shared.log("[Filler] AniList failed to resolve MAL", type: "Error") }
+                if episodes == nil { Logger.shared.log("[Filler] Jikan fetch failed for MAL ID: \(malID)", type: "Error") }
+                if let episodes = episodes {
+                    updateFillerSet(episodes: episodes)
+                }
+            }
+        }
+    }
+
+    func fetchAllJikanPages(malID: Int, completion: @escaping ([JikanEpisode]?) -> Void) {
+        var allEpisodes: [JikanEpisode] = []
+        var currentPage = 1
+        let perPage = 100
+        var nextAllowedTime = DispatchTime.now()
+
+        func fetchPage() {
+            // Throttle to <= 3 req/sec (Jikan limit)
+            let now = DispatchTime.now()
+            let delay: Double
+            if now < nextAllowedTime {
+                let diff = Double(nextAllowedTime.uptimeNanoseconds - now.uptimeNanoseconds) / 1_000_000_000
+                delay = max(diff, 0)
+            } else {
+                delay = 0
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
+                nextAllowedTime = DispatchTime.now() + .milliseconds(350)
+
+                let url = URL(string: "https://api.jikan.moe/v4/anime/\(malID)/episodes?page=\(currentPage)&limit=\(perPage)")!
+                Logger.shared.log("[Filler] Requesting Jikan page #\(currentPage) for MAL ID: \(malID)", type: "Debug")
+                URLSession.shared.dataTask(with: url) { data, response, error in
+                    let http = response as? HTTPURLResponse
+                    let status = http?.statusCode ?? 0
+
+                    struct RetryCounter { static var attempts: [Int: Int] = [:] }
+                    let key = currentPage
+                    let attempts = RetryCounter.attempts[key] ?? 0
+
+                    let shouldRetry: Bool = (error != nil) || (status == 429) || (status >= 500)
+                    if shouldRetry && attempts < 5 {
+                        Logger.shared.log("[Filler] Retry page #\(currentPage) attempts=\(attempts+1) status=\(status) error=\(error?.localizedDescription ?? "nil")", type: "Debug")
+                        let retryAfterSeconds: Double = {
+                            if status == 429, let ra = http?.value(forHTTPHeaderField: "Retry-After"), let v = Double(ra) { return min(v, 5.0) }
+                            return min(pow(1.5, Double(attempts)) , 5.0)
+                        }()
+                        RetryCounter.attempts[key] = attempts + 1
+                        DispatchQueue.global().asyncAfter(deadline: .now() + retryAfterSeconds) {
+                            fetchPage()
+                        }
+                        return
+                    } else if shouldRetry {
+                        Logger.shared.log("[Filler] Giving up page #\(currentPage) status=\(status)", type: "Error")
+                        completion(nil)
+                        return
+                    }
+
+                    guard let data = data else {
+                        Logger.shared.log("[Filler] No data for page #\(currentPage)", type: "Error")
+                        completion(nil)
+                        return
+                    }
+
+                    do {
+                        let response = try JSONDecoder().decode(JikanResponse.self, from: data)
+                        allEpisodes.append(contentsOf: response.data)
+                        if response.data.count == perPage {
+                            currentPage += 1
+                            fetchPage()
+                        } else {
+                            Logger.shared.log("[Filler] Finished pagination at page #\(currentPage) total=\(allEpisodes.count)", type: "Debug")
+                            completion(allEpisodes)
+                        }
+                    } catch {
+                        Logger.shared.log("[Filler] Decode error page #\(currentPage): \(error.localizedDescription)", type: "Error")
+                        completion(nil)
+                    }
+                }.resume()
+            }
+        }
+        fetchPage()
+    }
+
+    private func updateFillerSet(episodes: [JikanEpisode]) {
+        let fillerNumbers = Set(episodes.filter { $0.filler }.map { $0.mal_id })
+        Logger.shared.log("[Filler] Filler episodes resolved count=\(fillerNumbers.count)", type: "Debug")
+        self.jikanFillerSet = fillerNumbers
+    }
+    
 }

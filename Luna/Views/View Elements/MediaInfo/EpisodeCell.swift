@@ -9,15 +9,18 @@ import SwiftUI
 import Kingfisher
 
 struct EpisodeCell: View {
+    @Environment(\.colorScheme) private var colorScheme
     let episode: TMDBEpisode
     let showId: Int
     let progress: Double
     let isSelected: Bool
+    let fillerEpisodes: Set<Int>? = nil
     let onTap: () -> Void
     let onMarkWatched: () -> Void
     let onResetProgress: () -> Void
     
     @State private var isWatched: Bool = false
+    @State private var isFiller: Bool = false
     @AppStorage("horizontalEpisodeList") private var horizontalEpisodeList: Bool = false
     
     private var episodeKey: String {
