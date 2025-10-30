@@ -74,15 +74,16 @@ struct EpisodeCell: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
 
-                            if isFiller {
-                                Text("Filler")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Capsule().fill(Color.red.opacity(colorScheme == .dark ? 0.20 : 0.10)))
-                                    .overlay(Capsule().stroke(Color.red.opacity(0.24), lineWidth: 0.6))
-                                    .foregroundColor(.red)
-                            }                       
+if isFiller {
+    Text("Filler")
+        .font(.system(size: 12, weight: .semibold))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Capsule().fill(Color.red.opacity(colorScheme == .dark ? 0.20 : 0.10)))
+        .overlay(Capsule().stroke(Color.red.opacity(0.24), lineWidth: 0.6))
+        .foregroundColor(.red)
+}
+                        
                         Spacer()
                         
                         HStack {
