@@ -18,7 +18,6 @@ struct TVShowSeasonsSection: View {
     // Jikan filler set for this media (passed down to EpisodeCell)
     @State private var jikanFillerSet: Set<Int>? = nil
 
-    // Static/shared Jikan cache & progress guards (one cache for the app to avoid duplicate/expensive fetches)
     private static var jikanCache: [Int: (fetchedAt: Date, episodes: [JikanEpisode])] = [:]
     private static let jikanCacheQueue = DispatchQueue(label: "sora.jikan.cache.queue", attributes: .concurrent)
     private static let jikanCacheTTL: TimeInterval = 60 * 60 * 24 * 7 // 1 week
@@ -363,7 +362,6 @@ struct TVShowSeasonsSection: View {
                     self.isLoadingSeason = false
                 }
             } catch {
-                        Logger.shared.log("[Filler] Decode error page #\(currentPage): \(error.localizedDescription)", type: "Error")
                 await MainActor.run {
                     self.isLoadingSeason = false
                 }
@@ -389,7 +387,6 @@ struct TVShowSeasonsSection: View {
         return nil
     }
 
-    // MARK: - Jikan filler implementation
     private struct JikanResponse: Decodable {
         let data: [JikanEpisode]
     }
@@ -457,7 +454,6 @@ struct TVShowSeasonsSection: View {
                 Self.inProgressMALIDs.remove(malID)
             }
             DispatchQueue.main.async {
-            if let mal = bestMal { Logger.shared.log("[Filler] AniList matched MAL=\(mal) score=\(bestScore)", type: "Debug") } else { Logger.shared.log("[Filler] AniList failed to resolve MAL", type: "Error") }
                 if episodes == nil { Logger.shared.log("[Filler] Jikan fetch failed for MAL ID: \(malID)", type: "Error") }
                 if let episodes = episodes {
                     updateFillerSet(episodes: episodes)
@@ -465,8 +461,7 @@ struct TVShowSeasonsSection: View {
             }
         }
     }
-
-    func fetchAllJikanPages(malID: Int, completion: @escaping ([JikanEpisode]?) -> Void) {
+    private func fetchAllJikanPages(malID: Int, completion: @escaping ([JikanEpisode]?) -> Void) {
         var allEpisodes: [JikanEpisode] = []
         var currentPage = 1
         let perPage = 100
@@ -544,5 +539,68 @@ struct TVShowSeasonsSection: View {
         Logger.shared.log("[Filler] Filler episodes resolved count=\(fillerNumbers.count)", type: "Debug")
         self.jikanFillerSet = fillerNumbers
     }
-    
+
+    // MARK: - TMDB → AniList → MAL resolver
+    private func resolveMalIDFromTMDBForAniList() -> Bool {
+        Logger.shared.log("[Filler] Resolve MAL via AniList start", type: "Debug")
+        guard matchedMalID == nil, let tvShow = tvShow else { return false }
+        let titles = [tvShow.name, tvShow.originalName].compactMap { $0 }
+        let year = tvShow.firstAirDate.flatMap { Int($0.prefix(4)) }
+
+        let query = """
+        query($search: String) {
+          Page(page: 1, perPage: 5) {
+            media(search: $search, type: ANIME) {
+              idMal
+              title { romaji english native }
+              seasonYear
+            }
+          }
+        }
+        """
+        guard let url = URL(string: "https://graphql.anilist.co") else { return false }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let search = titles.first ?? ""
+        let body: [String: Any] = ["query": query, "variables": ["search": search]]
+        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
+
+        URLSession.shared.dataTask(with: req) { data, _, _ in
+            guard let data = data else {
+                Logger.shared.log("[Filler] AniList response empty", type: "Error")
+                return
+            }
+            let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            let media = (((json?["data"] as? [String: Any])?["Page"] as? [String: Any])?["media"] as? [[String: Any]]) ?? []
+
+            var bestMal: Int? = nil
+            var bestScore = -1
+            for m in media {
+                guard let idMal = m["idMal"] as? Int, idMal > 0 else { continue }
+                let t = m["title"] as? [String: Any]
+                let alts = [t?["romaji"] as? String, t?["english"] as? String, t?["native"] as? String]
+                    .compactMap { $0?.lowercased() }
+                let titleScore = titles.map { $0.lowercased() }.contains(where: { q in alts.contains(q) }) ? 10 : 0
+                let yr = m["seasonYear"] as? Int
+                let yearScore = (year != nil && yr != nil && abs(yr! - year!) <= 1) ? 5 : 0
+                let score = titleScore + yearScore
+                if score > bestScore {
+                    bestScore = score
+                    bestMal = idMal
+                }
+            }
+            DispatchQueue.main.async {
+                if let mal = bestMal {
+                    Logger.shared.log("[Filler] AniList matched MAL=\(mal) score=\(bestScore)", type: "Debug")
+                } else {
+                    Logger.shared.log("[Filler] AniList failed to resolve MAL", type: "Error")
+                }
+                self.matchedMalID = bestMal
+                _ = self.fetchJikanFillerInfoIfNeeded()
+            }
+        }.resume()
+        return true
+    }
 }
