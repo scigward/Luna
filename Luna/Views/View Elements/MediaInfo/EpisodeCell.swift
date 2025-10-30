@@ -73,7 +73,16 @@ struct EpisodeCell: View {
                         Text("Episode \(episode.episodeNumber)")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                        
+
+                            if isFiller {
+                                Text("Filler")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Capsule().fill(Color.red.opacity(colorScheme == .dark ? 0.20 : 0.10)))
+                                    .overlay(Capsule().stroke(Color.red.opacity(0.24), lineWidth: 0.6))
+                                    .foregroundColor(.red)
+                            }                       
                         Spacer()
                         
                         HStack {
@@ -280,17 +289,11 @@ struct EpisodeCell: View {
     }
     
     private func loadEpisodeProgress() {
+        if let set = fillerEpisodes { self.isFiller = set.contains(episode.episodeNumber); if self.isFiller { Logger.shared.log("[Filler] Episode #\(episode.episodeNumber) marked as filler", type: "Debug") } }
         isWatched = ProgressManager.shared.isEpisodeWatched(
             showId: showId,
             seasonNumber: episode.seasonNumber,
             episodeNumber: episode.episodeNumber
         )
-    
-        .onAppear {
-            if let set = fillerEpisodes {
-                self.isFiller = set.contains(episode.episodeNumber)
-                if self.isFiller { Logger.shared.log("[Filler] Episode #\(episode.episodeNumber) marked as filler", type: "Debug") }
-            }
-        }
-}
+    }
 }
