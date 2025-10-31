@@ -14,7 +14,7 @@ struct EpisodeCell: View {
     let showId: Int
     let progress: Double
     let isSelected: Bool
-    let fillerEpisodes: Set<Int>? = nil
+    let fillerEpisodes: Set<Int>? 
     let onTap: () -> Void
     let onMarkWatched: () -> Void
     let onResetProgress: () -> Void
