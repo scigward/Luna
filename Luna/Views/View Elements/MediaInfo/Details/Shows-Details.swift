@@ -138,8 +138,8 @@ struct TVShowSeasonsSection: View {
             }
             _ = self.fetchJikanFillerInfoIfNeeded()
         }
-        .onChange(of: seasonDetail) { new in
-            if new != nil { _ = self.fetchJikanFillerInfoIfNeeded() }
+         .onChange(of: seasonDetail != nil) { becameAvailable in
+            if becameAvailable { _ = self.fetchJikanFillerInfoIfNeeded() }
         }
         .sheet(isPresented: $showingSearchResults) {
             ModulesSearchResultsSheet(
