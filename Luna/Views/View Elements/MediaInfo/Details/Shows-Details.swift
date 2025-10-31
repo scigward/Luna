@@ -399,6 +399,7 @@ struct TVShowSeasonsSection: View {
     private struct JikanEpisode: Decodable {
         let mal_id: Int
         let filler: Bool
+        let aired: String?
     }
 
     private func fetchJikanFillerInfoIfNeeded() {
