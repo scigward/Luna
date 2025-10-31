@@ -540,11 +540,39 @@ struct TVShowSeasonsSection: View {
     }
 
     private func updateFillerSet(episodes: [JikanEpisode]) {
-        let allNumbers = Set(episodes.filter { $0.filler }.map { $0.mal_id })
-        let currentSet = Set((seasonDetail?.episodes ?? []).map { $0.episodeNumber })
-        let fillerNumbers = allNumbers.intersection(currentSet)
-        Logger.shared.log("[Filler] Filler episodes resolved (raw)=\(allNumbers.count) intersected=\(fillerNumbers.count)", type: "Debug")
-        self.jikanFillerSet = fillerNumbers
+        
+        // Build TMDB date -> episodeNumber map for current season
+        let tmdbByDate: [String: Int] = Dictionary(uniqueKeysWithValues:
+            (seasonDetail?.episodes ?? []).compactMap { ep in
+                guard let d = ep.airDate?.prefix(10) else { return nil } // "YYYY-MM-DD"
+                return (String(d), ep.episodeNumber)
+            })
+        // First, prefer date-based mapping for filler episodes
+        var mapped:Set<Int> = []
+        var usedDateMatches = 0
+        for e in episodes where e.filler {
+            if let a = e.aired?.prefix(10) {
+                let key = String(a)
+                if let num = tmdbByDate[key] {
+                    mapped.insert(num)
+                    usedDateMatches += 1
+                }
+            }
+        }
+        if usedDateMatches > 0 {
+            Logger.shared.log("[Filler] Date-mapped fillers matched=\\(usedDateMatches)", type: "Debug")
+        }
+        // Fallback: if no date matches, intersect numeric episode numbers with current season
+        if mapped.isEmpty {
+            let allNumbers = Set(episodes.filter { $0.filler }.map { $0.mal_id })
+            let currentSet = Set((seasonDetail?.episodes ?? []).map { $0.episodeNumber })
+            let intersected = allNumbers.intersection(currentSet)
+            mapped = intersected
+            Logger.shared.log("[Filler] Fallback numeric mapping raw=\\(allNumbers.count) intersected=\\(intersected.count)", type: "Debug")
+        }
+        self.jikanFillerSet = mapped.isEmpty ? nil : mapped
+        Logger.shared.log("[Filler] Final filler set size=\\(self.jikanFillerSet?.count ?? 0)", type: "Debug")
+    
     }
 
     // MARK: - TMDB → AniList → MAL resolver
