@@ -540,8 +540,10 @@ struct TVShowSeasonsSection: View {
     }
 
     private func updateFillerSet(episodes: [JikanEpisode]) {
-        let fillerNumbers = Set(episodes.filter { $0.filler }.map { $0.mal_id })
-        Logger.shared.log("[Filler] Filler episodes resolved count=\(fillerNumbers.count)", type: "Debug")
+        let allNumbers = Set(episodes.filter { $0.filler }.map { $0.mal_id })
+        let currentSet = Set((seasonDetail?.episodes ?? []).map { $0.episodeNumber })
+        let fillerNumbers = allNumbers.intersection(currentSet)
+        Logger.shared.log("[Filler] Filler episodes resolved (raw)=\(allNumbers.count) intersected=\(fillerNumbers.count)", type: "Debug")
         self.jikanFillerSet = fillerNumbers
     }
 
