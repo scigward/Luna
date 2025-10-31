@@ -305,10 +305,10 @@ struct TVShowSeasonsSection: View {
             
             EpisodeCell(
                 episode: episode,
-                fillerEpisodes: jikanFillerSet,
                 showId: tvShow.id,
                 progress: progress,
                 isSelected: isSelected,
+                fillerEpisodes: jikanFillerSet,
                 onTap: { episodeTapAction(episode: episode) },
                 onMarkWatched: { markAsWatched(episode: episode) },
                 onResetProgress: { resetProgress(episode: episode) }
