@@ -18,6 +18,7 @@ struct MovieDetailsSection: View {
                     .fontWeight(.bold)
                     .padding(.horizontal)
                     .padding(.top)
+                    .foregroundColor(.white)
                 
                 VStack(spacing: 12) {
                     if let runtime = movie.runtime, runtime > 0 {
@@ -46,14 +47,7 @@ struct MovieDetailsSection: View {
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 16)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.black.opacity(0.2))
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(.ultraThinMaterial)
-                        )
-                )
+                .applyLiquidGlassBackground(cornerRadius: 12)
                 .padding(.horizontal)
             }
         }
@@ -83,4 +77,3 @@ struct MovieDetailsSection: View {
         return nil
     }
 }
-

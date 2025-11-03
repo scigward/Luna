@@ -98,31 +98,36 @@ if isFillerComputed {
                                         .foregroundColor(.yellow)
                                     Text(String(format: "%.1f", episode.voteAverage))
                                         .font(.caption2)
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(.white)
                                     
                                     
                                     Text(" - ")
                                         .font(.caption2)
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(.white)
                                 }
                                 
                                 if let runtime = episode.runtime, runtime > 0 {
                                     Text(episode.runtimeFormatted)
                                         .font(.caption2)
+                                        .foregroundColor(.white)
                                 }
                             }
                         }
                         .padding(.horizontal, 4)
                         .padding(.vertical, 2)
-                        .background(Color.gray.opacity(0.2))
+                        .applyLiquidGlassBackground(
+                            cornerRadius: 16,
+                            fallbackFill: Color.gray.opacity(0.2),
+                            fallbackMaterial: .thinMaterial,
+                            glassTint: Color.gray.opacity(0.15)
+                        )
                         .clipShape(Capsule())
-                        .foregroundColor(.secondary)
                     }
                     
                     if !episode.name.isEmpty {
                         Text(episode.name)
                             .font(.subheadline)
-                            .foregroundColor(.primary)
+                            .foregroundColor(.white)
                             .lineLimit(1)
                     }
                     
@@ -144,6 +149,7 @@ if isFillerComputed {
         .onAppear {
             loadEpisodeProgress()
         }
+        .preferredColorScheme(.dark)
     }
     
     @MainActor private var verticalLayout: some View {
@@ -196,12 +202,12 @@ if isFillerComputed {
                                         .foregroundColor(.yellow)
                                     Text(String(format: "%.1f", episode.voteAverage))
                                         .font(.caption2)
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(.white)
                                     
                                     
                                     Text(" - ")
                                         .font(.caption2)
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(.white)
                                 }
                                 
                                 if let runtime = episode.runtime, runtime > 0 {
@@ -212,9 +218,13 @@ if isFillerComputed {
                         }
                         .padding(.horizontal, 4)
                         .padding(.vertical, 2)
-                        .background(Color.gray.opacity(0.2))
+                        .applyLiquidGlassBackground(
+                            cornerRadius: 16,
+                            fallbackFill: Color.gray.opacity(0.2),
+                            fallbackMaterial: .thinMaterial,
+                            glassTint: Color.gray.opacity(0.15)
+                        )
                         .clipShape(Capsule())
-                        .foregroundColor(.secondary)
                     }
                     
                     if !episode.name.isEmpty {
@@ -222,7 +232,7 @@ if isFillerComputed {
                             .font(.subheadline)
                             .fontWeight(.medium)
                             .lineLimit(1)
-                            .foregroundColor(.primary)
+                            .foregroundColor(.white)
                     }
                     
                     if let overview = episode.overview, !overview.isEmpty {
@@ -235,14 +245,7 @@ if isFillerComputed {
                 }
             }
             .padding(12)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.black.opacity(0.2))
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(.ultraThinMaterial)
-                    )
-            )
+            .applyLiquidGlassBackground(cornerRadius: 12)
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
                     .stroke(Color.white.opacity(0.1), lineWidth: 1)
@@ -255,6 +258,7 @@ if isFillerComputed {
         .onAppear {
             loadEpisodeProgress()
         }
+        .preferredColorScheme(.dark)
     }
     
     private var episodeContextMenu: some View {

@@ -51,6 +51,7 @@ struct TVShowSeasonsSection: View {
                     .fontWeight(.bold)
                     .padding(.horizontal)
                     .padding(.top)
+                    .foregroundColor(.white)
                 
                 VStack(spacing: 12) {
                     if let numberOfSeasons = tvShow.numberOfSeasons, numberOfSeasons > 0 {
@@ -87,14 +88,7 @@ struct TVShowSeasonsSection: View {
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 16)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.black.opacity(0.2))
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(.ultraThinMaterial)
-                        )
-                )
+                .applyLiquidGlassBackground(cornerRadius: 12)
                 .padding(.horizontal)
                 
                 if !tvShow.seasons.isEmpty {
@@ -105,6 +99,7 @@ struct TVShowSeasonsSection: View {
                                 .fontWeight(.bold)
                             Spacer()
                         }
+                        .foregroundColor(.white)
                         .padding(.horizontal)
                         .padding(.top)
                         
@@ -116,6 +111,7 @@ struct TVShowSeasonsSection: View {
                                 .fontWeight(.bold)
                             Spacer()
                         }
+                        .foregroundColor(.white)
                         .padding(.horizontal)
                         .padding(.top)
                     } else {
@@ -163,6 +159,7 @@ struct TVShowSeasonsSection: View {
             Text("Episodes")
                 .font(.title2)
                 .fontWeight(.bold)
+                .foregroundColor(.white)
             
             Spacer()
             
@@ -200,7 +197,7 @@ struct TVShowSeasonsSection: View {
                     
                     Image(systemName: "chevron.down")
                 }
-                .foregroundColor(.primary)
+                .foregroundColor(.white)
             }
         }
     }
@@ -250,7 +247,7 @@ struct TVShowSeasonsSection: View {
                                         .lineLimit(1)
                                         .multilineTextAlignment(.center)
                                         .frame(width: 80)
-                                        .foregroundColor(selectedSeason?.id == season.id ? .accentColor : .primary)
+                                        .foregroundColor(selectedSeason?.id == season.id ? .accentColor : .white)
                                 }
                             }
                             .buttonStyle(PlainButtonStyle())
