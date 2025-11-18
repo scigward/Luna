@@ -9,28 +9,25 @@ import SwiftUI
 import Kingfisher
 
 struct EpisodeCell: View {
+    
     @Environment(\.colorScheme) private var colorScheme
     let episode: TMDBEpisode
     let showId: Int
     let progress: Double
     let isSelected: Bool
-    let fillerEpisodes: Set<Int>? 
     let onTap: () -> Void
     let onMarkWatched: () -> Void
     let onResetProgress: () -> Void
     
-    @State private var isWatched: Bool = false
+    let fillerEpisodes: Set<Int>?
     @State private var isFiller: Bool = false
+    @State private var isWatched: Bool = false
     @AppStorage("horizontalEpisodeList") private var horizontalEpisodeList: Bool = false
     
     private var episodeKey: String {
-    "episode_\(episode.seasonNumber)_\(episode.episodeNumber)"
+        "episode_\(episode.seasonNumber)_\(episode.episodeNumber)"
     }
     
-    private var isFillerComputed: Bool {
-        return fillerEpisodes?.contains(episode.episodeNumber) ?? false
-    }
-
     var body: some View {
         if horizontalEpisodeList {
             horizontalLayout
@@ -75,18 +72,22 @@ struct EpisodeCell: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text("Episode \(episode.episodeNumber)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
 
-if isFillerComputed {
-    Text("Filler")
-        .font(.system(size: 12, weight: .semibold))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(Capsule().fill(Color.red.opacity(colorScheme == .dark ? 0.20 : 0.10)))
-        .overlay(Capsule().stroke(Color.red.opacity(0.24), lineWidth: 0.6))
-        .foregroundColor(.red)
-}
+                        if isFiller {
+                            Text("Filler")
+                                .font(.system(size: 12, weight: .semibold))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.red.opacity(colorScheme == .dark ? 0.20 : 0.10))
+                                )
+                                .overlay(
+                                    Capsule()
+                                        .stroke(Color.red.opacity(0.24), lineWidth: 0.6)
+                                )
+                                .foregroundColor(.red)
+                        }
                         
                         Spacer()
                         
@@ -99,7 +100,6 @@ if isFillerComputed {
                                     Text(String(format: "%.1f", episode.voteAverage))
                                         .font(.caption2)
                                         .foregroundColor(.white)
-                                    
                                     
                                     Text(" - ")
                                         .font(.caption2)
@@ -147,6 +147,8 @@ if isFillerComputed {
             episodeContextMenu
         }
         .onAppear {
+            let epNum = episode.episodeNumber
+            if let set = fillerEpisodes { self.isFiller = set.contains(epNum) } else { self.isFiller = false }
             loadEpisodeProgress()
         }
         .preferredColorScheme(.dark)
@@ -188,9 +190,22 @@ if isFillerComputed {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text("Episode \(episode.episodeNumber)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .fontWeight(.medium)
+
+                        if isFiller {
+                            Text("Filler")
+                                .font(.system(size: 12, weight: .semibold))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.red.opacity(colorScheme == .dark ? 0.20 : 0.10))
+                                )
+                                .overlay(
+                                    Capsule()
+                                        .stroke(Color.red.opacity(0.24), lineWidth: 0.6)
+                                )
+                                .foregroundColor(.red)
+                        }
                         
                         Spacer()
                         
@@ -203,7 +218,6 @@ if isFillerComputed {
                                     Text(String(format: "%.1f", episode.voteAverage))
                                         .font(.caption2)
                                         .foregroundColor(.white)
-                                    
                                     
                                     Text(" - ")
                                         .font(.caption2)
@@ -256,6 +270,8 @@ if isFillerComputed {
             episodeContextMenu
         }
         .onAppear {
+            let epNum = episode.episodeNumber
+            if let set = fillerEpisodes { self.isFiller = set.contains(epNum) } else { self.isFiller = false }
             loadEpisodeProgress()
         }
         .preferredColorScheme(.dark)
@@ -298,7 +314,6 @@ if isFillerComputed {
     }
     
     private func loadEpisodeProgress() {
-        if let set = fillerEpisodes { self.isFiller = set.contains(episode.episodeNumber); if self.isFiller { Logger.shared.log("[Filler] Episode #\(episode.episodeNumber) marked as filler", type: "Debug") } }
         isWatched = ProgressManager.shared.isEpisodeWatched(
             showId: showId,
             seasonNumber: episode.seasonNumber,

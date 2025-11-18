@@ -1,5 +1,5 @@
 //
-//  ShowsDetails.swift
+//  Shows-Details.swift
 //  Sora
 //
 //  Created by Francesco on 07/08/25.
@@ -9,23 +9,13 @@ import SwiftUI
 import Kingfisher
 
 struct TVShowSeasonsSection: View {
+    @StateObject private var anilistMapper = AnilistMapper.shared
+    @AppStorage("enableFillerBadges") private var enableFillerBadges: Bool = true
     let tvShow: TMDBTVShowWithSeasons?
     @Binding var selectedSeason: TMDBSeason?
     @Binding var seasonDetail: TMDBSeasonDetail?
     @Binding var selectedEpisodeForSearch: TMDBEpisode?
     let tmdbService: TMDBService
-
-    // Jikan filler set for this media (passed down to EpisodeCell)
-    @State private var jikanFillerSet: Set<Int>? = nil
-
-    private static var jikanCache: [Int: (fetchedAt: Date, episodes: [JikanEpisode])] = [:]
-    private static let jikanCacheQueue = DispatchQueue(label: "sora.jikan.cache.queue", attributes: .concurrent)
-    private static let jikanCacheTTL: TimeInterval = 60 * 60 * 24 * 7 // 1 week
-    private static var inProgressMALIDs: Set<Int> = []
-    private static let inProgressQueue = DispatchQueue(label: "sora.jikan.inprogress.queue")
-
-    @State private var matchedMalID: Int? = nil
-
     
     @State private var isLoadingSeason = false
     @State private var showingSearchResults = false
@@ -132,10 +122,6 @@ struct TVShowSeasonsSection: View {
                     }
                 }
             }
-            _ = self.fetchJikanFillerInfoIfNeeded()
-        }
-         .onChange(of: seasonDetail != nil) { becameAvailable in
-            if becameAvailable { _ = self.fetchJikanFillerInfoIfNeeded() }
         }
         .sheet(isPresented: $showingSearchResults) {
             ModulesSearchResultsSheet(
@@ -150,6 +136,11 @@ struct TVShowSeasonsSection: View {
             Button("OK") { }
         } message: {
             Text("You don't have any active services. Please go to the Services tab to download and activate services.")
+        }
+        .task {
+            if enableFillerBadges, let tvShow = tvShow {
+                await anilistMapper.loadIfNeeded(tmdbShowId: tvShow.id, tmdbService: tmdbService)
+            }
         }
     }
     
@@ -306,10 +297,10 @@ struct TVShowSeasonsSection: View {
             
             EpisodeCell(
                 episode: episode,
+                fillerEpisodes: anilistMapper.fillerSet(for: tvShow.id),
                 showId: tvShow.id,
                 progress: progress,
                 isSelected: isSelected,
-                fillerEpisodes: jikanFillerSet,
                 onTap: { episodeTapAction(episode: episode) },
                 onMarkWatched: { markAsWatched(episode: episode) },
                 onResetProgress: { resetProgress(episode: episode) }
@@ -387,254 +378,5 @@ struct TVShowSeasonsSection: View {
         }
         
         return nil
-    }
-
-    private struct JikanResponse: Decodable {
-        let data: [JikanEpisode]
-    }
-    
-    private struct JikanEpisode: Decodable {
-        let mal_id: Int
-        let filler: Bool
-        let aired: String?
-    }
-
-    private func fetchJikanFillerInfoIfNeeded() {
-        Logger.shared.log("[Filler] fetchJikanFillerInfoIfNeeded invoked", type: "Debug")
-        guard jikanFillerSet == nil else { return }
-        fetchJikanFillerInfo()
-    }
-
-    private func fetchJikanFillerInfo() {
-        Logger.shared.log("[Filler] fetchJikanFillerInfo start", type: "Debug")
-        guard let malID = matchedMalID else {
-            Logger.shared.log("[Filler] MAL ID missing — resolving via AniList", type: "Debug")
-            // Resolve via AniList using TMDB title/year
-            resolveMalIDFromTMDBForAniList()
-            return
-        }
-
-        // Check cache first
-        var cachedEpisodes: [JikanEpisode]? = nil
-        Self.jikanCacheQueue.sync {
-            if let entry = Self.jikanCache[malID], Date().timeIntervalSince(entry.fetchedAt) < Self.jikanCacheTTL {
-                cachedEpisodes = entry.episodes
-            }
-        }
-        if let episodes = cachedEpisodes {
-            Logger.shared.log("[Filler] Cache hit for MAL ID: \(malID) episodes=\(episodes.count)", type: "Debug")
-            updateFillerSet(episodes: episodes)
-            return
-        }
-        
-        Logger.shared.log("[Filler] Cache miss for MAL ID: \(malID)", type: "Debug")
-        // Prevent duplicate requests
-        var shouldFetch = false
-        Self.inProgressQueue.sync {
-            if !Self.inProgressMALIDs.contains(malID) {
-                Self.inProgressMALIDs.insert(malID)
-                shouldFetch = true
-            }
-        }
-        
-        if !shouldFetch {
-            Logger.shared.log("[Filler] Fetch already in progress for MAL ID: \(malID) — skipping", type: "Debug")
-            return
-        }
-        
-        Logger.shared.log("[Filler] Fetching Jikan pages for MAL ID: \(malID)", type: "Debug")
-        // Fetch all pages
-        fetchAllJikanPages(malID: malID) { episodes in
-            // store in cache
-            if let eps = episodes {
-                Logger.shared.log("[Filler] Jikan fetch completed for MAL ID: \(malID) totalEpisodes=\(eps.count)", type: "Debug")
-                Self.jikanCacheQueue.async(flags: .barrier) {
-                    Self.jikanCache[malID] = (Date(), eps)
-                }
-            }
-            // reset in-progress
-            Self.inProgressQueue.sync {
-                Self.inProgressMALIDs.remove(malID)
-            }
-            DispatchQueue.main.async {
-                if episodes == nil { Logger.shared.log("[Filler] Jikan fetch failed for MAL ID: \(malID)", type: "Error") }
-                if let episodes = episodes {
-                    updateFillerSet(episodes: episodes)
-                }
-            }
-        }
-    }
-    private func fetchAllJikanPages(malID: Int, completion: @escaping ([JikanEpisode]?) -> Void) {
-        var allEpisodes: [JikanEpisode] = []
-        var currentPage = 1
-        let perPage = 100
-        var nextAllowedTime = DispatchTime.now()
-
-        func fetchPage() {
-            // Throttle to <= 3 req/sec (Jikan limit)
-            let now = DispatchTime.now()
-            let delay: Double
-            if now < nextAllowedTime {
-                let diff = Double(nextAllowedTime.uptimeNanoseconds - now.uptimeNanoseconds) / 1_000_000_000
-                delay = max(diff, 0)
-            } else {
-                delay = 0
-            }
-            DispatchQueue.global().asyncAfter(deadline: .now() + delay) {
-                nextAllowedTime = DispatchTime.now() + .milliseconds(350)
-
-                let url = URL(string: "https://api.jikan.moe/v4/anime/\(malID)/episodes?page=\(currentPage)&limit=\(perPage)")!
-                Logger.shared.log("[Filler] Requesting Jikan page #\(currentPage) for MAL ID: \(malID)", type: "Debug")
-                URLSession.shared.dataTask(with: url) { data, response, error in
-                    let http = response as? HTTPURLResponse
-                    let status = http?.statusCode ?? 0
-
-                    struct RetryCounter { static var attempts: [Int: Int] = [:] }
-                    let key = currentPage
-                    let attempts = RetryCounter.attempts[key] ?? 0
-
-                    let shouldRetry: Bool = (error != nil) || (status == 429) || (status >= 500)
-                    if shouldRetry && attempts < 5 {
-                        Logger.shared.log("[Filler] Retry page #\(currentPage) attempts=\(attempts+1) status=\(status) error=\(error?.localizedDescription ?? "nil")", type: "Debug")
-                        let retryAfterSeconds: Double = {
-                            if status == 429, let ra = http?.value(forHTTPHeaderField: "Retry-After"), let v = Double(ra) { return min(v, 5.0) }
-                            return min(pow(1.5, Double(attempts)) , 5.0)
-                        }()
-                        RetryCounter.attempts[key] = attempts + 1
-                        DispatchQueue.global().asyncAfter(deadline: .now() + retryAfterSeconds) {
-                            fetchPage()
-                        }
-                        return
-                    } else if shouldRetry {
-                        Logger.shared.log("[Filler] Giving up page #\(currentPage) status=\(status)", type: "Error")
-                        completion(nil)
-                        return
-                    }
-
-                    guard let data = data else {
-                        Logger.shared.log("[Filler] No data for page #\(currentPage)", type: "Error")
-                        completion(nil)
-                        return
-                    }
-
-                    do {
-                        let response = try JSONDecoder().decode(JikanResponse.self, from: data)
-                        allEpisodes.append(contentsOf: response.data)
-                        if response.data.count == perPage {
-                            currentPage += 1
-                            fetchPage()
-                        } else {
-                            Logger.shared.log("[Filler] Finished pagination at page #\(currentPage) total=\(allEpisodes.count)", type: "Debug")
-                            completion(allEpisodes)
-                        }
-                    } catch {
-                        Logger.shared.log("[Filler] Decode error page #\(currentPage): \(error.localizedDescription)", type: "Error")
-                        completion(nil)
-                    }
-                }.resume()
-            }
-        }
-        fetchPage()
-    }
-
-    private func updateFillerSet(episodes: [JikanEpisode]) {
-        // Build TMDB date -> episodeNumber map for current season
-        let tmdbByDate: [String: Int] = Dictionary(uniqueKeysWithValues:
-            (seasonDetail?.episodes ?? []).compactMap { ep in
-                guard let d = ep.airDate?.prefix(10) else { return nil } // "YYYY-MM-DD"
-                return (String(d), ep.episodeNumber)
-            })
-
-        // Prefer date-based mapping (robust for multi-cour/season)
-        var mapped: Set<Int> = []
-        var dateMatches = 0
-        for e in episodes where e.filler {
-            if let a = e.aired?.prefix(10) {
-                let key = String(a)
-                if let num = tmdbByDate[key] {
-                    mapped.insert(num)
-                    dateMatches += 1
-                }
-            }
-        }
-        if dateMatches > 0 {
-            Logger.shared.log("[Filler] Date-mapped fillers matched=\(dateMatches)", type: "Debug")
-        }
-
-        // Fallback intersect numeric global numbers with this season's visible numbers
-        if mapped.isEmpty {
-            let allNumbers = Set(episodes.filter { $0.filler }.map { $0.mal_id })
-            let currentSet = Set((seasonDetail?.episodes ?? []).map { $0.episodeNumber })
-            let intersected = allNumbers.intersection(currentSet)
-            mapped = intersected
-            Logger.shared.log("[Filler] Fallback numeric mapping raw=\(allNumbers.count) intersected=\(intersected.count)", type: "Debug")
-        }
-
-        self.jikanFillerSet = mapped.isEmpty ? nil : mapped
-        Logger.shared.log("[Filler] Final filler set size=\(self.jikanFillerSet?.count ?? 0)", type: "Debug")
-        }
-
-    // MARK: - TMDB → AniList → MAL resolver
-    private func resolveMalIDFromTMDBForAniList() -> Bool {
-        Logger.shared.log("[Filler] Resolve MAL via AniList start", type: "Debug")
-        guard matchedMalID == nil, let tvShow = tvShow else { return false }
-        let titles = [tvShow.name, tvShow.originalName].compactMap { $0 }
-        let year = tvShow.firstAirDate.flatMap { Int($0.prefix(4)) }
-
-        let query = """
-        query($search: String) {
-          Page(page: 1, perPage: 5) {
-            media(search: $search, type: ANIME) {
-              idMal
-              title { romaji english native }
-              seasonYear
-            }
-          }
-        }
-        """
-        guard let url = URL(string: "https://graphql.anilist.co") else { return false }
-        var req = URLRequest(url: url)
-        req.httpMethod = "POST"
-        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let search = titles.first ?? ""
-        let body: [String: Any] = ["query": query, "variables": ["search": search]]
-        req.httpBody = try? JSONSerialization.data(withJSONObject: body)
-
-        URLSession.shared.dataTask(with: req) { data, _, _ in
-            guard let data = data else {
-                Logger.shared.log("[Filler] AniList response empty", type: "Error")
-                return
-            }
-            let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-            let media = (((json?["data"] as? [String: Any])?["Page"] as? [String: Any])?["media"] as? [[String: Any]]) ?? []
-
-            var bestMal: Int? = nil
-            var bestScore = -1
-            for m in media {
-                guard let idMal = m["idMal"] as? Int, idMal > 0 else { continue }
-                let t = m["title"] as? [String: Any]
-                let alts = [t?["romaji"] as? String, t?["english"] as? String, t?["native"] as? String]
-                    .compactMap { $0?.lowercased() }
-                let titleScore = titles.map { $0.lowercased() }.contains(where: { q in alts.contains(q) }) ? 10 : 0
-                let yr = m["seasonYear"] as? Int
-                let yearScore = (year != nil && yr != nil && abs(yr! - year!) <= 1) ? 5 : 0
-                let score = titleScore + yearScore
-                if score > bestScore {
-                    bestScore = score
-                    bestMal = idMal
-                }
-            }
-            DispatchQueue.main.async {
-                if let mal = bestMal {
-                    Logger.shared.log("[Filler] AniList matched MAL=\(mal) score=\(bestScore)", type: "Debug")
-                } else {
-                    Logger.shared.log("[Filler] AniList failed to resolve MAL", type: "Error")
-                }
-                self.matchedMalID = bestMal
-                _ = self.fetchJikanFillerInfoIfNeeded()
-            }
-        }.resume()
-        return true
     }
 }
