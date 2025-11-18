@@ -16,13 +16,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Generate Xcode project
-        run: xcodegen generate
+      - name: Make build script executable
+        run: chmod +x ./ipabuild.sh
 
-      - name: Archive generated Xcode project
+      - name: Build IPA
+        run: ./ipabuild.sh ios
+
+      - name: Compress Xcode project
         run: zip -r Luna-xcodeproj.zip Luna.xcodeproj
 
       - name: Upload Xcode project artifact
@@ -30,9 +38,6 @@ jobs:
         with:
           name: Luna Xcode Project
           path: Luna-xcodeproj.zip
-
-      - name: Build IPA
-        run: ./ipabuild.sh ios
 
       - name: Compress IPA
         run: |
