@@ -66,16 +66,16 @@ struct HomeView: View {
     
     private var homeContent: some View {
         ZStack {
-            Group {
-                if useSolidBackgroundBehindHero {
-                    Color.background
-                } else {
-                    ambientColor
-                }
+            if useSolidBackgroundBehindHero {
+                Color.background
+                    .ignoresSafeArea(.all)
+            } else {
+                ambientColor
+                    .ignoresSafeArea(.all)
             }
-            .ignoresSafeArea(.all)
-            
-            if isLoading {
+
+
+if isLoading {
                 loadingView
             } else if let errorMessage = errorMessage {
                 errorView(errorMessage)

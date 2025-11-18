@@ -28,7 +28,6 @@
 		13830AF02E55C04F00B3CDE4 /* AlgorithmSelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13830AEF2E55C04F00B3CDE4 /* AlgorithmSelectionView.swift */; };
 		13830AF22E55F51300B3CDE4 /* AlternativeUIView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13830AF12E55F51300B3CDE4 /* AlternativeUIView.swift */; };
 		13830AF42E55F5FF00B3CDE4 /* AccentColorManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13830AF32E55F5FF00B3CDE4 /* AccentColorManager.swift */; };
-		934538462486ED6FBBB2797F /* FillerHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC7B8763204BE1614AA168BC /* FillerHelpers.swift */; };
 		139509A22E7DDAE100CB60D4 /* PlayerSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 139509A12E7DDAE100CB60D4 /* PlayerSettingsView.swift */; };
 		13B2E5742E7597B9009F3271 /* JSController-NetworkFetch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13B2E5732E7597B9009F3271 /* JSController-NetworkFetch.swift */; };
 		13B6F3452EA4C6BC00DECD2B /* ProgressManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13B6F3442EA4C6BC00DECD2B /* ProgressManager.swift */; };
@@ -165,7 +164,6 @@
 		13F5B5912E73090000565E75 /* HomeSection.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HomeSection.swift; sourceTree = "<group>"; };
 		13F5B5942E730CB200565E75 /* TMDBContentFilter.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = TMDBContentFilter.swift; sourceTree = "<group>"; };
 		13F5B5962E730CDB00565E75 /* TMDBFiltersView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = TMDBFiltersView.swift; sourceTree = "<group>"; };
-		DC7B8763204BE1614AA168BC /* FillerHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FillerHelpers.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -460,14 +458,6 @@
 			path = Library;
 			sourceTree = "<group>";
 		};
-		580479926602356ABB0741D9 /* Helpers */ = {
-			isa = PBXGroup;
-			children = (
-				DC7B8763204BE1614AA168BC /* FillerHelpers.swift */,
-			);
-			path = Helpers;
-			sourceTree = "<group>";
-		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -613,7 +603,6 @@
 				13F5B5922E73090000565E75 /* HomeSection.swift in Sources */,
 				13F0729C2E4B2D9200EF90EB /* JavaScriptCore+Extensions.swift in Sources */,
 				13F072B22E4B2D9200EF90EB /* FallbackImageView.swift in Sources */,
-				934538462486ED6FBBB2797F /* FillerHelpers.swift in Sources */,
 				13F072B62E4B2D9200EF90EB /* AmbientColor.swift in Sources */,
 				13F187AE2E6F38CE00747F7E /* LibraryCollection.swift in Sources */,
 				13830AF02E55C04F00B3CDE4 /* AlgorithmSelectionView.swift in Sources */,
