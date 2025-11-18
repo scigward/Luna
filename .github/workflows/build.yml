@@ -21,11 +21,23 @@ jobs:
         with:
           xcode-version: latest-stable
 
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
       - name: Make build script executable
         run: chmod +x ./ipabuild.sh
 
       - name: Build IPA
         run: ./ipabuild.sh ios
+
+      - name: Compress Xcode project
+        run: zip -r Luna-xcodeproj.zip Luna.xcodeproj
+
+      - name: Upload Xcode project artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Luna Xcode Project
+          path: Luna-xcodeproj.zip
 
       - name: Compress IPA
         run: |
