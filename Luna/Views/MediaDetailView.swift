@@ -57,7 +57,7 @@ struct MediaDetailView: View {
         ZStack {
             Group {
                 if useSolidBackgroundBehindHero {
-                    Color(.systemBackground)
+                    Color.background
                 } else {
                     ambientColor
                 }

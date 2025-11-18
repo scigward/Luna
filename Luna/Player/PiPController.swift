@@ -59,7 +59,9 @@ final class PiPController: NSObject {
         pipController = AVPictureInPictureController(contentSource: contentSource)
         pipController?.delegate = self
         pipController?.requiresLinearPlayback = false
+        #if !os(tvOS)
         pipController?.canStartPictureInPictureAutomaticallyFromInline = true
+        #endif
     }
     
     func startPictureInPicture() {
@@ -96,7 +98,7 @@ extension PiPController: AVPictureInPictureControllerDelegate {
     }
     
     func pictureInPictureController(_ pictureInPictureController: AVPictureInPictureController, failedToStartPictureInPictureWithError error: Error) {
-        print("Failed to start PiP: \(error)")
+        Logger.shared.log("Failed to start PiP: \(error)", type: "mpv")
         delegate?.pipController(self, didStartPictureInPicture: false)
     }
     
