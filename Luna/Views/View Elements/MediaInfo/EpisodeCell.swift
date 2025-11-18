@@ -72,7 +72,8 @@ struct EpisodeCell: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text("Episode \(episode.episodeNumber)")
-
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                         if isFiller {
                             Text("Filler")
                                 .font(.system(size: 12, weight: .semibold))
@@ -190,7 +191,9 @@ struct EpisodeCell: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text("Episode \(episode.episodeNumber)")
-
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .fontWeight(.medium)
                         if isFiller {
                             Text("Filler")
                                 .font(.system(size: 12, weight: .semibold))

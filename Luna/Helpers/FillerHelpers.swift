@@ -8,8 +8,6 @@
 import Foundation
 import Combine
 
-// MARK: - AniList
-
 struct AniListTitle: Codable {
     let romaji: String?
     let english: String?
@@ -49,7 +47,7 @@ final class AniListClient {
 
     func searchAnime(title: String, startYear: Int?) async throws -> [AniListMedia] {
         let query = """
-        query($search: String, $year: Int) {
+        query($search: String) {
           Page(perPage: 10) {
             media(search: $search, type: ANIME) {
               id
@@ -61,8 +59,7 @@ final class AniListClient {
           }
         }
         """
-        var variables: [String: Any] = ["search": title]
-        if let y = startYear { variables["year"] = y }
+        let variables: [String: Any] = ["search": title]
         let body: [String: Any] = ["query": query, "variables": variables]
         let payload = try JSONSerialization.data(withJSONObject: body, options: [])
 
@@ -81,8 +78,6 @@ final class AniListClient {
         return decoded.data.Page.media
     }
 }
-
-// MARK: - Jikan
 
 struct JikanEpisode: Codable {
     let mal_id: Int 
@@ -150,8 +145,6 @@ final class JikanClient {
     }
 }
 
-// MARK: - Persistent Cache (12 hours)
-
 private struct FillerCacheEntry: Codable {
     let fetchedAt: Date
     let fillerEpisodes: [Int]
@@ -161,17 +154,14 @@ private struct FillerCacheDiskModel: Codable {
     var byTMDB: [Int: FillerCacheEntry]
 }
 
-// MARK: - AnilistMapper
-
 @MainActor
 final class AnilistMapper: ObservableObject {
     static let shared = AnilistMapper()
 
     @Published private(set) var fillerSetsByTMDB: [Int: Set<Int>] = [:]
 
-    // Memory + Disk cache
     private var memoryCache: [Int: (fetchedAt: Date, filler: Set<Int>)] = [:]
-    private let ttl: TimeInterval = 60 * 60 * 12  // 12 hours
+    private let ttl: TimeInterval = 60 * 60 * 12
     private var inFlight: Set<Int> = []
     private let cacheURL: URL
 
@@ -185,7 +175,6 @@ final class AnilistMapper: ObservableObject {
         if let entry = memoryCache[tmdbShowId], Date().timeIntervalSince(entry.fetchedAt) < ttl {
             return entry.filler
         }
-        // Disk fallback
         if let disk = try? Data(contentsOf: cacheURL),
            let model = try? JSONDecoder().decode(FillerCacheDiskModel.self, from: disk),
            let entry = model.byTMDB[tmdbShowId],
@@ -199,13 +188,11 @@ final class AnilistMapper: ObservableObject {
     }
 
     func loadIfNeeded(tmdbShowId: Int, tmdbService: TMDBService) async {
-        // Feature flag (default true)
         let enabled = (UserDefaults.standard.object(forKey: "enableFillerBadges") as? Bool) ?? true
         if !enabled {
             Logger.shared.log("Filler disabled via flag", type: "Debug")
             return
         }
-        // Cache hit
         if let cached = fillerSet(for: tmdbShowId) {
             Logger.shared.log("Filler cache hit for TMDB \(tmdbShowId)", type: "Debug")
             fillerSetsByTMDB[tmdbShowId] = cached
@@ -249,8 +236,6 @@ final class AnilistMapper: ObservableObject {
             Logger.shared.log("Filler load error (TMDB \(tmdbShowId)): \(error.localizedDescription)", type: "Error")
         }
     }
-
-    // MARK: - Disk Cache Helpers
 
     private func loadCacheFromDisk() {
         guard let data = try? Data(contentsOf: cacheURL) else { return }
