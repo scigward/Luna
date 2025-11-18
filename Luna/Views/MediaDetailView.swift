@@ -55,16 +55,16 @@ struct MediaDetailView: View {
     
     var body: some View {
         ZStack {
-            if useSolidBackgroundBehindHero {
-                Color.background
-                    .ignoresSafeArea(.all)
-            } else {
-                ambientColor
-                    .ignoresSafeArea(.all)
+            Group {
+                if useSolidBackgroundBehindHero {
+                    Color("background")
+                } else {
+                    ambientColor
+                }
             }
-
-
-if isLoading {
+            .ignoresSafeArea(.all)
+            
+            if isLoading {
                 loadingView
             } else if let errorMessage = errorMessage {
                 errorView(errorMessage)
