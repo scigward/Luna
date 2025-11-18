@@ -74,21 +74,6 @@ struct EpisodeCell: View {
                         Text("Episode \(episode.episodeNumber)")
                             .font(.caption)
                             .foregroundColor(.secondary)
-                        if isFiller {
-                            Text("Filler")
-                                .font(.system(size: 12, weight: .semibold))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(
-                                    Capsule()
-                                        .fill(Color.red.opacity(colorScheme == .dark ? 0.20 : 0.10))
-                                )
-                                .overlay(
-                                    Capsule()
-                                        .stroke(Color.red.opacity(0.24), lineWidth: 0.6)
-                                )
-                                .foregroundColor(.red)
-                        }
                         
                         Spacer()
                         
@@ -125,6 +110,22 @@ struct EpisodeCell: View {
                         .clipShape(Capsule())
                     }
                     
+                    if isFiller {
+                        Text("Filler")
+                            .font(.system(size: 12, weight: .semibold))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                Capsule()
+                                    .fill(Color.red.opacity(colorScheme == .dark ? 0.20 : 0.10))
+                            )
+                            .overlay(
+                                Capsule()
+                                    .stroke(Color.red.opacity(0.24), lineWidth: 0.6)
+                            )
+                            .foregroundColor(.red)
+                    }
+                    
                     if !episode.name.isEmpty {
                         Text(episode.name)
                             .font(.subheadline)
@@ -140,8 +141,13 @@ struct EpisodeCell: View {
                             .multilineTextAlignment(.leading)
                     }
                 }
-                .frame(width: 240, alignment: .leading)
             }
+            .padding(12)
+            .applyLiquidGlassBackground(cornerRadius: 12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+            )
         }
         .buttonStyle(PlainButtonStyle())
         .contextMenu {
@@ -152,7 +158,6 @@ struct EpisodeCell: View {
             if let set = fillerEpisodes { self.isFiller = set.contains(epNum) } else { self.isFiller = false }
             loadEpisodeProgress()
         }
-        .preferredColorScheme(.dark)
     }
     
     @MainActor private var verticalLayout: some View {
@@ -194,21 +199,6 @@ struct EpisodeCell: View {
                             .font(.caption)
                             .foregroundColor(.secondary)
                             .fontWeight(.medium)
-                        if isFiller {
-                            Text("Filler")
-                                .font(.system(size: 12, weight: .semibold))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(
-                                    Capsule()
-                                        .fill(Color.red.opacity(colorScheme == .dark ? 0.20 : 0.10))
-                                )
-                                .overlay(
-                                    Capsule()
-                                        .stroke(Color.red.opacity(0.24), lineWidth: 0.6)
-                                )
-                                .foregroundColor(.red)
-                        }
                         
                         Spacer()
                         
@@ -244,6 +234,22 @@ struct EpisodeCell: View {
                         .clipShape(Capsule())
                     }
                     
+                    if isFiller {
+                        Text("Filler")
+                            .font(.system(size: 12, weight: .semibold))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                Capsule()
+                                    .fill(Color.red.opacity(colorScheme == .dark ? 0.20 : 0.10))
+                            )
+                            .overlay(
+                                Capsule()
+                                    .stroke(Color.red.opacity(0.24), lineWidth: 0.6)
+                            )
+                            .foregroundColor(.red)
+                    }
+                    
                     if !episode.name.isEmpty {
                         Text(episode.name)
                             .font(.subheadline)
@@ -277,41 +283,42 @@ struct EpisodeCell: View {
             if let set = fillerEpisodes { self.isFiller = set.contains(epNum) } else { self.isFiller = false }
             loadEpisodeProgress()
         }
-        .preferredColorScheme(.dark)
     }
     
+    @ViewBuilder
     private var episodeContextMenu: some View {
-        Group {
-            Button(action: onTap) {
-                Label("Play", systemImage: "play.fill")
+        Button(action: {
+            onTap()
+        }) {
+            Label("Play Episode", systemImage: "play.circle.fill")
+        }
+        
+        if !isWatched {
+            Button(action: {
+                onMarkWatched()
+                isWatched = true
+            }) {
+                Label("Mark as Watched", systemImage: "checkmark.circle")
             }
-            
-            if progress < 0.95 {
-                Button(action: {
-                    ProgressManager.shared.markEpisodeAsWatched(
-                        showId: showId,
-                        seasonNumber: episode.seasonNumber,
-                        episodeNumber: episode.episodeNumber
-                    )
-                    onMarkWatched()
-                    isWatched = true
-                }) {
-                    Label("Mark as Watched", systemImage: "checkmark.circle")
-                }
+        } else {
+            Button(action: {
+                onResetProgress()
+                isWatched = false
+            }) {
+                Label("Mark as Unwatched", systemImage: "xmark.circle")
             }
-            
-            if progress > 0 {
-                Button(action: {
-                    ProgressManager.shared.resetEpisodeProgress(
-                        showId: showId,
-                        seasonNumber: episode.seasonNumber,
-                        episodeNumber: episode.episodeNumber
-                    )
-                    onResetProgress()
-                    isWatched = false
-                }) {
-                    Label("Reset Progress", systemImage: "arrow.counterclockwise")
-                }
+        }
+        
+        if progress > 0 {
+            Button(role: .destructive, action: {
+                ProgressManager.shared.resetEpisodeProgress(
+                    showId: showId,
+                    seasonNumber: episode.seasonNumber,
+                    episodeNumber: episode.episodeNumber
+                )
+                onResetProgress()
+            }) {
+                Label("Reset Progress", systemImage: "arrow.counterclockwise")
             }
         }
     }
