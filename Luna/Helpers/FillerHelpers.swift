@@ -167,7 +167,7 @@ final class AnilistMapper: ObservableObject {
 
     private init() {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        self.cacheURL = caches.appendingPathComponent("anilist_filler_cache.json")
+        self.cacheURL = caches.appendingPathComponent("FillerCache.json")
         self.loadCacheFromDisk()
     }
 
