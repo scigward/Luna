@@ -50,6 +50,7 @@ struct EpisodeCell: View {
                                         .foregroundColor(.white.opacity(0.7))
                                 )
                         }
+                        .cancelOnDisappear(true)
                         .resizable()
                         .aspectRatio(16/9, contentMode: .fill)
                         .frame(width: 240, height: 135)
@@ -65,15 +66,53 @@ struct EpisodeCell: View {
                                 .padding(.bottom, 4)
                         }
                         .frame(width: 240, height: 135)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.black.opacity(0.3))
+                        )
+                    }
+                    
+                    if isWatched {
+                        VStack {
+                            HStack {
+                                Spacer()
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                                    .padding(6)
+                                    .background(
+                                        Circle()
+                                            .fill(Color.black.opacity(0.6))
+                                    )
+                            }
+                            Spacer()
+                        }
+                        .frame(width: 240, height: 135)
                     }
                 }
                 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text("Episode \(episode.episodeNumber)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                        HStack(spacing: 6) {
+                            Text("Episode \(episode.episodeNumber)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            if isFiller {
+                                Text("Filler")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(
+                                        Capsule()
+                                            .fill(Color.red.opacity(colorScheme == .dark ? 0.20 : 0.10))
+                                    )
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(Color.red.opacity(0.24), lineWidth: 0.6)
+                                    )
+                                    .foregroundColor(.red)
+                            }
+                        }
                         
                         Spacer()
                         
@@ -86,7 +125,6 @@ struct EpisodeCell: View {
                                     Text(String(format: "%.1f", episode.voteAverage))
                                         .font(.caption2)
                                         .foregroundColor(.white)
-                                    
                                     Text(" - ")
                                         .font(.caption2)
                                         .foregroundColor(.white)
@@ -108,22 +146,7 @@ struct EpisodeCell: View {
                             glassTint: Color.gray.opacity(0.15)
                         )
                         .clipShape(Capsule())
-                    }
-                    
-                    if isFiller {
-                        Text("Filler")
-                            .font(.system(size: 12, weight: .semibold))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(
-                                Capsule()
-                                    .fill(Color.red.opacity(colorScheme == .dark ? 0.20 : 0.10))
-                            )
-                            .overlay(
-                                Capsule()
-                                    .stroke(Color.red.opacity(0.24), lineWidth: 0.6)
-                            )
-                            .foregroundColor(.red)
+                        .fixedSize(horizontal: true, vertical: false)
                     }
                     
                     if !episode.name.isEmpty {
@@ -155,9 +178,14 @@ struct EpisodeCell: View {
         }
         .onAppear {
             let epNum = episode.episodeNumber
-            if let set = fillerEpisodes { self.isFiller = set.contains(epNum) } else { self.isFiller = false }
+            if let set = fillerEpisodes {
+                self.isFiller = set.contains(epNum)
+            } else {
+                self.isFiller = false
+            }
             loadEpisodeProgress()
         }
+        .preferredColorScheme(.dark)
     }
     
     @MainActor private var verticalLayout: some View {
@@ -174,6 +202,7 @@ struct EpisodeCell: View {
                                         .foregroundColor(.white.opacity(0.7))
                                 )
                         }
+                        .cancelOnDisappear(true)
                         .resizable()
                         .aspectRatio(16/9, contentMode: .fill)
                         .frame(width: 120, height: 68)
@@ -189,16 +218,38 @@ struct EpisodeCell: View {
                                 .padding(.bottom, 4)
                         }
                         .frame(width: 120, height: 68)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color.black.opacity(0.3))
+                        )
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                     }
                 }
                 
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text("Episode \(episode.episodeNumber)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .fontWeight(.medium)
+                        HStack(spacing: 6) {
+                            Text("Episode \(episode.episodeNumber)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .fontWeight(.medium)
+                            
+                            if isFiller {
+                                Text("Filler")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(
+                                        Capsule()
+                                            .fill(Color.red.opacity(colorScheme == .dark ? 0.20 : 0.10))
+                                    )
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(Color.red.opacity(0.24), lineWidth: 0.6)
+                                    )
+                                    .foregroundColor(.red)
+                            }
+                        }
                         
                         Spacer()
                         
@@ -220,6 +271,7 @@ struct EpisodeCell: View {
                                 if let runtime = episode.runtime, runtime > 0 {
                                     Text(episode.runtimeFormatted)
                                         .font(.caption2)
+                                        .foregroundColor(.white)
                                 }
                             }
                         }
@@ -232,22 +284,7 @@ struct EpisodeCell: View {
                             glassTint: Color.gray.opacity(0.15)
                         )
                         .clipShape(Capsule())
-                    }
-                    
-                    if isFiller {
-                        Text("Filler")
-                            .font(.system(size: 12, weight: .semibold))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(
-                                Capsule()
-                                    .fill(Color.red.opacity(colorScheme == .dark ? 0.20 : 0.10))
-                            )
-                            .overlay(
-                                Capsule()
-                                    .stroke(Color.red.opacity(0.24), lineWidth: 0.6)
-                            )
-                            .foregroundColor(.red)
+                        .fixedSize(horizontal: true, vertical: false)
                     }
                     
                     if !episode.name.isEmpty {
@@ -280,45 +317,48 @@ struct EpisodeCell: View {
         }
         .onAppear {
             let epNum = episode.episodeNumber
-            if let set = fillerEpisodes { self.isFiller = set.contains(epNum) } else { self.isFiller = false }
+            if let set = fillerEpisodes {
+                self.isFiller = set.contains(epNum)
+            } else {
+                self.isFiller = false
+            }
             loadEpisodeProgress()
         }
+        .preferredColorScheme(.dark)
     }
     
-    @ViewBuilder
     private var episodeContextMenu: some View {
-        Button(action: {
-            onTap()
-        }) {
-            Label("Play Episode", systemImage: "play.circle.fill")
-        }
-        
-        if !isWatched {
-            Button(action: {
-                onMarkWatched()
-                isWatched = true
-            }) {
-                Label("Mark as Watched", systemImage: "checkmark.circle")
+        Group {
+            Button(action: onTap) {
+                Label("Play", systemImage: "play.fill")
             }
-        } else {
-            Button(action: {
-                onResetProgress()
-                isWatched = false
-            }) {
-                Label("Mark as Unwatched", systemImage: "xmark.circle")
+            
+            if progress < 0.95 {
+                Button(action: {
+                    ProgressManager.shared.markEpisodeAsWatched(
+                        showId: showId,
+                        seasonNumber: episode.seasonNumber,
+                        episodeNumber: episode.episodeNumber
+                    )
+                    onMarkWatched()
+                    isWatched = true
+                }) {
+                    Label("Mark as Watched", systemImage: "checkmark.circle")
+                }
             }
-        }
-        
-        if progress > 0 {
-            Button(role: .destructive, action: {
-                ProgressManager.shared.resetEpisodeProgress(
-                    showId: showId,
-                    seasonNumber: episode.seasonNumber,
-                    episodeNumber: episode.episodeNumber
-                )
-                onResetProgress()
-            }) {
-                Label("Reset Progress", systemImage: "arrow.counterclockwise")
+            
+            if progress > 0 {
+                Button(action: {
+                    ProgressManager.shared.resetEpisodeProgress(
+                        showId: showId,
+                        seasonNumber: episode.seasonNumber,
+                        episodeNumber: episode.episodeNumber
+                    )
+                    onResetProgress()
+                    isWatched = false
+                }) {
+                    Label("Reset Progress", systemImage: "arrow.counterclockwise")
+                }
             }
         }
     }
