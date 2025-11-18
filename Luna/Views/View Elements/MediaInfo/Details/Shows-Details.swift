@@ -297,13 +297,13 @@ struct TVShowSeasonsSection: View {
             
             EpisodeCell(
                 episode: episode,
-                fillerEpisodes: anilistMapper.fillerSet(for: tvShow.id),
                 showId: tvShow.id,
                 progress: progress,
                 isSelected: isSelected,
                 onTap: { episodeTapAction(episode: episode) },
                 onMarkWatched: { markAsWatched(episode: episode) },
-                onResetProgress: { resetProgress(episode: episode) }
+                onResetProgress: { resetProgress(episode: episode) },
+                fillerEpisodes: anilistMapper.fillerSet(for: tvShow.id)
             )
         } else {
             EmptyView()

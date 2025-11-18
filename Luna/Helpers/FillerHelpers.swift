@@ -124,8 +124,9 @@ final class JikanClient {
                     continue
                 }
                 let decoded = try JSONDecoder().decode(JikanEpisodesPage.self, from: data)
-                for ep in decoded.data where ep.filler == true {
-                    filler.insert(ep.mal_id)
+                for (index, ep) in decoded.data.enumerated() where ep.filler == true {
+                    let episodeNumber = (page - 1) * 100 + index + 1
+                    filler.insert(episodeNumber)
                 }
                 if decoded.pagination.has_next_page {
                     page += 1

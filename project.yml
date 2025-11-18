@@ -1,0 +1,19 @@
+name: Luna
+targets:
+  Luna:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Luna
+    settings:
+      base:
+        INFOPLIST_FILE: Luna/Info.plist
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 399LMK6Q2Y
+        PRODUCT_BUNDLE_IDENTIFIER: me.cranci.solar
+        PRODUCT_NAME: Luna
+        IPHONEOS_DEPLOYMENT_TARGET: 17.0
+        TARGETED_DEVICE_FAMILY: 1
+        SWIFT_VERSION: 5.0
+        CODE_SIGN_ENTITLEMENTS: Luna/Luna.entitlements
