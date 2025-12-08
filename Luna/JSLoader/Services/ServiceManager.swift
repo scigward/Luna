@@ -279,7 +279,7 @@ class ServiceManager: ObservableObject {
         guard let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)),
               url.scheme != nil else { return false }
     
-    let path = url.path. lowercased()
+    let path = url.path.lowercased()
         if path.hasSuffix(".json") {
         return true
     }
