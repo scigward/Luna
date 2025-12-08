@@ -78,7 +78,7 @@ class ServiceManager: ObservableObject {
     // MARK: - Public Methods
     
     func handlePotentialServiceURL(_ text: String) async -> Bool {
-        guard await isValidJSONURL(text) else { return false }
+        guard isValidJSONURL(text) else { return false }
         await downloadService(from: text)
         return true
     }
@@ -275,34 +275,24 @@ class ServiceManager: ObservableObject {
     
     // MARK: - Private Methods
     
-    private func isValidJSONURL(_ text: String) async -> Bool {
+    private func isValidJSONURL(_ text: String) -> Bool {
         guard let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)),
-              url.scheme != nil else { return false }
-    
-    let path = url.path.lowercased()
-        if path.hasSuffix(".json") {
+        url.scheme != nil else { return false }
+
+        if url.pathExtension.lowercased() == "json" || text.lowercased().contains(".json") {
         return true
-    }
-    
-    if path.contains("/raw") {
-        return true
-    }
-        
-        return await validateJSONContent(from: url)
     }
 
-    private func validateJSONContent(from url: URL) async -> Bool {
-        do {
-            let (data, response) = try await URLSession.shared.data(from: url)
-            guard (response as? HTTPURLResponse)?.statusCode == 200 else { return false }
-            
-            if let _ = try JSONSerialization.jsonObject(with: data) {
-                return true
-            }
-        } catch {
-            return false
-        }
-        return false
+        if url.pathComponents.contains("/raw") {
+        return true
+    }
+
+        if let data = try? Data(contentsOf: url),
+        try? JSONSerialization.jsonObject(with: data) != nil {
+        return true
+    }
+
+    return false
     }
     
     private func downloadAndParseMetadata(from urlString: String) async throws -> ServicesMetadata {
