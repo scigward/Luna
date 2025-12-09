@@ -277,22 +277,18 @@ class ServiceManager: ObservableObject {
     
     private func isValidJSONURL(_ text: String) -> Bool {
         guard let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)),
-        url.scheme != nil else { return false }
+              url.scheme != nil else { return false }
 
-        if url.pathExtension.lowercased() == "json" || text.lowercased().contains(".json") {
-        return true
-    }
-
-        if url.pathComponents.contains("/raw") {
-        return true
-    }
+        if url.pathComponents.contains("/raw") || url.pathExtension.lowercased() == "json" || text.lowercased().contains(".json") {
+            return true
+        }
 
         if let data = try? Data(contentsOf: url),
-        try? JSONSerialization.jsonObject(with: data) != nil {
-        return true
-    }
+           try? JSONSerialization.jsonObject(with: data) != nil {
+            return true
+        }
 
-    return false
+        return false
     }
     
     private func downloadAndParseMetadata(from urlString: String) async throws -> ServicesMetadata {
