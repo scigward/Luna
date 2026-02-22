@@ -668,14 +668,42 @@ struct ContinueWatchingCard: View {
     @State private var title: String = ""
     @State private var isHovering: Bool = false
     @State private var isLoaded: Bool = false
+    @State private var showingSearchResults = false
     
     private var cardWidth: CGFloat { isTvOS ? 380 : 260 }
     private var cardHeight: CGFloat { isTvOS ? 220 : 146 }
     private var logoMaxWidth: CGFloat { isTvOS ? 200 : 140 }
     private var logoMaxHeight: CGFloat { isTvOS ? 60 : 40 }
     
+    private var displayTitle: String {
+        title.isEmpty ? item.title : title
+    }
+    
+    private var selectedEpisodeForSearch: TMDBEpisode? {
+        guard !item.isMovie,
+              let seasonNumber = item.seasonNumber,
+              let episodeNumber = item.episodeNumber else {
+            return nil
+        }
+        
+        return TMDBEpisode(
+            id: Int("\(item.tmdbId)\(seasonNumber)\(episodeNumber)") ?? item.tmdbId,
+            name: "",
+            overview: nil,
+            stillPath: nil,
+            episodeNumber: episodeNumber,
+            seasonNumber: seasonNumber,
+            airDate: nil,
+            runtime: nil,
+            voteAverage: 0,
+            voteCount: 0
+        )
+    }
+    
     var body: some View {
-        NavigationLink(destination: destinationView) {
+        Button {
+            showingSearchResults = true
+        } label: {
             ZStack(alignment: .bottomLeading) {
                 ZStack {
                     if let backdropURL = backdropURL {
@@ -770,6 +798,15 @@ struct ContinueWatchingCard: View {
         .task {
             await loadMediaDetails()
         }
+        .sheet(isPresented: $showingSearchResults) {
+            ModulesSearchResultsSheet(
+                mediaTitle: displayTitle,
+                originalTitle: nil,
+                isMovie: item.isMovie,
+                selectedEpisode: selectedEpisodeForSearch,
+                tmdbId: item.tmdbId
+            )
+        }
     }
     
     @ViewBuilder
@@ -798,29 +835,6 @@ struct ContinueWatchingCard: View {
                     .font(isTvOS ? .largeTitle : .title)
                     .foregroundColor(.gray.opacity(0.5))
             )
-    }
-    
-    @ViewBuilder
-    private var destinationView: some View {
-        if isLoaded {
-            MediaDetailView(searchResult: TMDBSearchResult(
-                id: item.tmdbId,
-                mediaType: item.isMovie ? "movie" : "tv",
-                title: item.isMovie ? title : nil,
-                name: item.isMovie ? nil : title,
-                overview: nil,
-                posterPath: nil,
-                backdropPath: nil,
-                releaseDate: nil,
-                firstAirDate: nil,
-                voteAverage: nil,
-                popularity: 0,
-                adult: false,
-                genreIds: nil
-            ))
-        } else {
-            ProgressView()
-        }
     }
     
     private func loadMediaDetails() async {

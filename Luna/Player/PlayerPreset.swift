@@ -7,14 +7,7 @@
 
 import Foundation
 
-struct PlayerPreset: Identifiable, Hashable {
-    enum Identifier: String, CaseIterable {
-        case sdrRec709
-        case hdr10
-        case dolbyVisionP5
-        case dolbyVisionP8
-    }
-    
+struct PlayerPreset: Hashable {
     struct Stream: Hashable {
         enum Source: Hashable {
             case remote(URL)
@@ -34,7 +27,6 @@ struct PlayerPreset: Identifiable, Hashable {
         }
     }
     
-    let id: Identifier
     let title: String
     let summary: String
     let stream: Stream?

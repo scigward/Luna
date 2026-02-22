@@ -21,7 +21,7 @@ struct ServiceSetting {
 }
 
 @MainActor
-class ServiceManager: ObservableObject {
+final class ServiceManager: ObservableObject {
     static let shared = ServiceManager()
 
     @Published var services: [Service] = []
@@ -29,99 +29,69 @@ class ServiceManager: ObservableObject {
     @Published var downloadProgress: Double = 0.0
     @Published var downloadMessage: String = ""
 
+    private enum Constants {
+        static let uiDelayNanoseconds: UInt64 = 300_000_000
+        static let searchTimeoutNanoseconds: UInt64 = 20_000_000_000
+        static let settingsStartMarker = "// Settings start"
+        static let settingsEndMarker = "// Settings end"
+    }
+
+    private let jsonEncoder = JSONEncoder()
+
+    private static let settingRegex = try! NSRegularExpression(pattern: #"const\s+(\w+)\s*=\s*([^;]+);"#)
+    private static let commentRegex = try! NSRegularExpression(pattern: #"//\s*(.+)$"#)
+
     private init() {
         loadServicesFromCloud()
     }
 
     // MARK: - Public Functions
 
-    let delay: UInt64 = 300_000_000 // 300ms
+    let delay: UInt64 = Constants.uiDelayNanoseconds
 
     func updateServices() async {
         guard !services.isEmpty else { return }
 
-        isDownloading = true
-        downloadProgress = 0.0
-        downloadMessage = "Updating services..."
+        await updateProgress(0.0, "Updating services...")
+        await pause()
 
         let total = Double(services.count)
-        var completed: Double = 0
-
-        for service in services {
-            await updateProgress(downloadProgress, "Updating \(service.metadata.sourceName)...")
-            try? await Task.sleep(nanoseconds: delay)
-
-            do {
-                // Download metadata
-                await updateProgress(downloadProgress + 0.1 / total, "Downloading metadata for \(service.metadata.sourceName)...")
-                let metadata = try await downloadAndParseMetadata(from: service.url)
-                try? await Task.sleep(nanoseconds: delay)
-
-                // Download JavaScript
-                await updateProgress(downloadProgress + 0.5 / total, "Downloading JavaScript for \(service.metadata.sourceName)...")
-                let jsContent = try await downloadJavaScript(from: metadata.scriptUrl)
-                try? await Task.sleep(nanoseconds: delay)
-
-                // Save service using existing ID
-                ServiceStore.shared.storeService(
-                    id: service.id,
-                    url: service.url,
-                    jsonMetadata: String(data: try JSONEncoder().encode(metadata), encoding: .utf8) ?? "",
-                    jsScript: jsContent,
-                    isActive: service.isActive
-                )
-
-                Logger.shared.log("Service \(service.metadata.sourceName) updated successfully", type: "ServiceManager")
-            } catch {
-                Logger.shared.log("Failed to update service \(service.metadata.sourceName): \(error.localizedDescription)", type: "ServiceManager")
-            }
-
-            // Update global progress
-            completed += 1
-            downloadProgress = completed / total
-            try? await Task.sleep(nanoseconds: delay)
-
-            // Cleanup
-            loadServicesFromCloud()
-            await resetDownloadState()
-            downloadMessage = "All services updated!"
+        for (index, service) in services.enumerated() {
+            let baseProgress = Double(index) / total
+            await updateService(service, baseProgress: baseProgress, total: total)
         }
+
+        loadServicesFromCloud()
+        await finalizeDownload(with: "All services updated!")
     }
 
     // MARK: - Download single service from JSON URL
     func downloadService(from jsonURL: String) async {
         await updateProgress(0.0, "Starting download...")
-        try? await Task.sleep(nanoseconds: delay)
+        await pause()
 
         do {
             await updateProgress(0.2, "Downloading metadata...")
             let metadata = try await downloadAndParseMetadata(from: jsonURL)
-            try? await Task.sleep(nanoseconds: delay)
+            await pause()
 
             await updateProgress(0.5, "Downloading JavaScript...")
             let jsContent = try await downloadJavaScript(from: metadata.scriptUrl)
-            try? await Task.sleep(nanoseconds: delay)
+            await pause()
 
             await updateProgress(0.8, "Saving service...")
             let serviceId = generateServiceUUID(from: metadata)
             ServiceStore.shared.storeService(
                 id: serviceId,
                 url: jsonURL,
-                jsonMetadata: String(data: try JSONEncoder().encode(metadata), encoding: .utf8) ?? "",
+                jsonMetadata: String(data: try jsonEncoder.encode(metadata), encoding: .utf8) ?? "",
                 jsScript: jsContent,
                 isActive: false
             )
-            try? await Task.sleep(nanoseconds: delay)
+            await pause()
 
             loadServicesFromCloud()
-
-            await MainActor.run {
-                self.downloadProgress = 1.0
-                self.downloadMessage = "Service downloaded successfully!"
-            }
-
-            try? await Task.sleep(nanoseconds: delay)
-            await resetDownloadState()
+            await finalizeDownload(with: "Service downloaded successfully!")
         } catch {
             await resetDownloadState()
             Logger.shared.log("Failed to download service: \(error.localizedDescription)", type: "ServiceManager")
@@ -159,8 +129,12 @@ class ServiceManager: ObservableObject {
         var mutable = services
         mutable.move(fromOffsets: offsets, toOffset: toOffset)
 
+        let entitiesByID = Dictionary(uniqueKeysWithValues: ServiceStore.shared.getEntities().compactMap { entity in
+            entity.id.map { ($0, entity) }
+        })
+
         for (index, service) in mutable.enumerated() {
-            if let entity = ServiceStore.shared.getEntities().first(where: { $0.id == service.id }) {
+            if let entity = entitiesByID[service.id] {
                 entity.sortIndex = Int64(index)
             }
         }
@@ -184,8 +158,7 @@ class ServiceManager: ObservableObject {
         await withTaskGroup(of: (UUID, [SearchItem]).self) { group in
             for service in activeList {
                 group.addTask {
-                    let timeoutSeconds: UInt64 = 20_000_000_000 // 20sec
-                    return await self.withTimeout(nanoseconds: timeoutSeconds) {
+                    return await self.withTimeout(nanoseconds: Constants.searchTimeoutNanoseconds) {
                         let found = await self.searchInService(service: service, query: query)
                         return (service.id, found)
                     } ?? (service.id, [])
@@ -218,8 +191,7 @@ class ServiceManager: ObservableObject {
         await withTaskGroup(of: (Service, [SearchItem]?).self) { group in
             for service in activeList {
                 group.addTask {
-                    let timeoutSeconds: UInt64 = 20_000_000_000 // 20sec
-                    return await self.withTimeout(nanoseconds: timeoutSeconds) {
+                    return await self.withTimeout(nanoseconds: Constants.searchTimeoutNanoseconds) {
                         let found = await self.searchInService(service: service, query: query)
                         return (service, found)
                     } ?? (service, [])
@@ -277,6 +249,47 @@ class ServiceManager: ObservableObject {
         services = ServiceStore.shared.getServices()
     }
 
+    private func pause() async {
+        try? await Task.sleep(nanoseconds: delay)
+    }
+
+    private func finalizeDownload(with message: String) async {
+        await MainActor.run {
+            self.downloadProgress = 1.0
+            self.downloadMessage = message
+        }
+        await pause()
+        await resetDownloadState()
+    }
+
+    private func updateService(_ service: Service, baseProgress: Double, total: Double) async {
+        await updateProgress(baseProgress, "Updating \(service.metadata.sourceName)...")
+        await pause()
+
+        do {
+            await updateProgress(baseProgress + 0.2 / total, "Downloading metadata for \(service.metadata.sourceName)...")
+            let metadata = try await downloadAndParseMetadata(from: service.url)
+            await pause()
+
+            await updateProgress(baseProgress + 0.6 / total, "Downloading JavaScript for \(service.metadata.sourceName)...")
+            let jsContent = try await downloadJavaScript(from: metadata.scriptUrl)
+            await pause()
+
+            ServiceStore.shared.storeService(
+                id: service.id,
+                url: service.url,
+                jsonMetadata: String(data: try jsonEncoder.encode(metadata), encoding: .utf8) ?? "",
+                jsScript: jsContent,
+                isActive: service.isActive
+            )
+
+            await updateProgress(baseProgress + 1.0 / total, "Updated \(service.metadata.sourceName)")
+            Logger.shared.log("Service \(service.metadata.sourceName) updated successfully", type: "ServiceManager")
+        } catch {
+            Logger.shared.log("Failed to update service \(service.metadata.sourceName): \(error.localizedDescription)", type: "ServiceManager")
+        }
+    }
+
     private func generateServiceUUID(from metadata: ServiceMetadata) -> UUID {
         let identifier = "\(metadata.sourceName)_\(metadata.author.name)_\(metadata.version)"
         let hash = identifier.sha256
@@ -320,10 +333,10 @@ class ServiceManager: ObservableObject {
         for line in lines {
             let trimmedLine = line.trimmingCharacters(in: .whitespaces)
 
-            if trimmedLine.contains("// Settings start") {
+            if trimmedLine.contains(Constants.settingsStartMarker) {
                 inSettingsSection = true
                 continue
-            } else if trimmedLine.contains("// Settings end") {
+            } else if trimmedLine.contains(Constants.settingsEndMarker) {
                 break
             }
 
@@ -337,11 +350,9 @@ class ServiceManager: ObservableObject {
     }
 
     private func parseSettingLine(_ line: String) -> ServiceSetting? {
-        let settingRegex = try! NSRegularExpression(pattern: #"const\s+(\w+)\s*=\s*([^;]+);"#)
-        let commentRegex = try! NSRegularExpression(pattern: #"//\s*(.+)$"#)
         let range = NSRange(location: 0, length: line.utf16.count)
 
-        guard let match = settingRegex.firstMatch(in: line, range: range),
+                guard let match = Self.settingRegex.firstMatch(in: line, range: range),
               let keyRange = Range(match.range(at: 1), in: line),
               let valueRange = Range(match.range(at: 2), in: line) else {
             return nil
@@ -350,7 +361,7 @@ class ServiceManager: ObservableObject {
         let key = String(line[keyRange])
         let valueString = String(line[valueRange]).trimmingCharacters(in: .whitespaces)
 
-        let rawComment = commentRegex.firstMatch(in: line, range: range).flatMap { match in
+        let rawComment = Self.commentRegex.firstMatch(in: line, range: range).flatMap { match in
             Range(match.range(at: 1), in: line).map { String(line[$0]) }
         }
 
@@ -413,7 +424,6 @@ class ServiceManager: ObservableObject {
 
     private func updateSettingsInJS(_ jsContent: String, with settings: [ServiceSetting]) -> String {
         var lines = jsContent.components(separatedBy: .newlines)
-        let settingRegex = try! NSRegularExpression(pattern: #"const\s+(\w+)\s*=\s*([^;]+);"#)
         let settingsMap = Dictionary(uniqueKeysWithValues: settings.map { ($0.key, $0) })
 
         var inSettingsSection = false
@@ -421,17 +431,17 @@ class ServiceManager: ObservableObject {
         for (index, line) in lines.enumerated() {
             let trimmedLine = line.trimmingCharacters(in: .whitespaces)
 
-            if trimmedLine.contains("// Settings start") {
+            if trimmedLine.contains(Constants.settingsStartMarker) {
                 inSettingsSection = true
                 continue
-            } else if trimmedLine.contains("// Settings end") {
+            } else if trimmedLine.contains(Constants.settingsEndMarker) {
                 break
             }
 
             if inSettingsSection && trimmedLine.hasPrefix("const ") {
                 let range = NSRange(location: 0, length: trimmedLine.utf16.count)
 
-                if let match = settingRegex.firstMatch(in: trimmedLine, range: range),
+                     if let match = Self.settingRegex.firstMatch(in: trimmedLine, range: range),
                    let keyRange = Range(match.range(at: 1), in: trimmedLine) {
                     let key = String(trimmedLine[keyRange])
 

@@ -1150,7 +1150,7 @@ struct ModulesSearchResultsSheet: View {
                 let subtitleArray: [String]? = subtitle.map { [$0] }
                 let pvc = PlayerViewController(
                     url: streamURL,
-                    preset: preset ?? PlayerPreset(id: .sdrRec709, title: "Default", summary: "", stream: nil, commands: []),
+                    preset: preset ?? PlayerPreset(title: "Default", summary: "", stream: nil, commands: []),
                     headers: finalHeaders,
                     subtitles: subtitleArray
                 )
