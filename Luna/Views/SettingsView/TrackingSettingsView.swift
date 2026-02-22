@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Kingfisher
 
 struct TrackingSettingsView: View {
     @StateObject private var syncManager = ProgressSyncManager.shared
@@ -50,6 +51,7 @@ struct TrackingSettingsView: View {
                 providerName: "Trakt.tv",
                 isLoading: isTraktLoading,
                 isLoggedIn: syncManager.isTraktLoggedIn,
+                username: syncManager.traktUsername,
                 syncTitle: "Sync shows/movies progress",
                 isSyncEnabled: $traktSyncEnabled,
                 loginTitle: "Log In with Trakt",
@@ -67,10 +69,9 @@ struct TrackingSettingsView: View {
                     traktSyncEnabled = false
                 }
             )
+            .listRowInsets(EdgeInsets())
         } header: {
             Text("Trakt")
-        } footer: {
-            Text("Login and enable push updates.")
         }
     }
 
@@ -81,6 +82,7 @@ struct TrackingSettingsView: View {
                 providerName: "AniList.co",
                 isLoading: isAniListLoading,
                 isLoggedIn: syncManager.isAniListLoggedIn,
+                username: syncManager.aniListUsername,
                 syncTitle: "Sync anime progress",
                 isSyncEnabled: $aniListSyncEnabled,
                 loginTitle: "Log In with AniList",
@@ -98,6 +100,7 @@ struct TrackingSettingsView: View {
                     aniListSyncEnabled = false
                 }
             )
+            .listRowInsets(EdgeInsets())
         } header: {
             Text("AniList")
         } footer: {
@@ -107,9 +110,8 @@ struct TrackingSettingsView: View {
 
     private var infoSection: some View {
         Section {
-            Text("Trakt receives watch progress updates. AniList updates when an episode/movie reaches completion.\n cranci1 and Luna are not affiliated with AniList nor Trakt, push updates may be incorrect sometimes.")
+            Text("Trakt receives watch progress updates. AniList updates when an episode/movie reaches completion.\ncranci1 and Luna are not affiliated with AniList nor Trakt, push updates may be incorrect sometimes.")
                 .font(.footnote)
-                .foregroundColor(.secondary)
         } header: {
             Text("How It Works")
         }
@@ -151,6 +153,7 @@ struct TrackingSettingsView: View {
         providerName: String,
         isLoading: Bool,
         isLoggedIn: Bool,
+        username: String?,
         syncTitle: String,
         isSyncEnabled: Binding<Bool>,
         loginTitle: String,
@@ -160,21 +163,23 @@ struct TrackingSettingsView: View {
     ) -> some View {
         VStack(spacing: 0) {
             HStack(alignment: .center, spacing: 10) {
-                AsyncImage(url: logoURL) { phase in
-                    if let image = phase.image {
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    } else {
+                KFImage(logoURL)
+                    .placeholder {
                         RoundedRectangle(cornerRadius: 10)
                             .fill(Color.gray.opacity(0.2))
                     }
-                }
+                    .resizable()
+                    .scaledToFill()
                 .frame(width: 60, height: 60)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .padding(.trailing, 10)
 
                 VStack(alignment: .leading, spacing: 4) {
+                    let loginStatusText = {
+                        guard let username, !username.isEmpty else { return "Logged in" }
+                        return "Logged in as \(username)"
+                    }()
+
                     Text(providerName)
                         .font(.title3)
                         .fontWeight(.semibold)
@@ -184,7 +189,7 @@ struct TrackingSettingsView: View {
                             .scaleEffect(0.8)
                             .frame(height: 18)
                     } else if isLoggedIn {
-                        Text("Logged in")
+                        Text(loginStatusText)
                             .font(.footnote)
                             .fontWeight(.medium)
                             .foregroundStyle(Color.accentColor)

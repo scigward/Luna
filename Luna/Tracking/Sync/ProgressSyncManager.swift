@@ -47,6 +47,8 @@ final class ProgressSyncManager: NSObject, ObservableObject {
 
     @Published private(set) var isTraktLoggedIn = false
     @Published private(set) var isAniListLoggedIn = false
+    @Published private(set) var traktUsername: String?
+    @Published private(set) var aniListUsername: String?
     @Published private(set) var traktSyncEnabled = false
     @Published private(set) var aniListSyncEnabled = false
 
@@ -67,6 +69,8 @@ final class ProgressSyncManager: NSObject, ObservableObject {
         static let aniListClientSecret = "sync.anilist.clientSecret"
         static let traktEnabled = "sync.trakt.enabled"
         static let aniListEnabled = "sync.anilist.enabled"
+        static let traktUsername = "sync.trakt.username"
+        static let aniListUsername = "sync.anilist.username"
     }
 
     private enum BundledCredentials {
@@ -95,6 +99,16 @@ final class ProgressSyncManager: NSObject, ObservableObject {
         isAniListLoggedIn = loadSession(for: .anilist) != nil
         traktSyncEnabled = userDefaults.bool(forKey: DefaultsKey.traktEnabled)
         aniListSyncEnabled = userDefaults.bool(forKey: DefaultsKey.aniListEnabled)
+        traktUsername = userDefaults.string(forKey: DefaultsKey.traktUsername)
+        aniListUsername = userDefaults.string(forKey: DefaultsKey.aniListUsername)
+
+        if isTraktLoggedIn, (traktUsername?.isEmpty ?? true) {
+            Task { await refreshTraktUsername() }
+        }
+
+        if isAniListLoggedIn, (aniListUsername?.isEmpty ?? true) {
+            Task { await refreshAniListUsername() }
+        }
     }
 
     func traktClientId() -> String {
@@ -140,11 +154,15 @@ final class ProgressSyncManager: NSObject, ObservableObject {
     func logoutTrakt() {
         SyncKeychainStore.remove(KeychainKey.traktSession)
         isTraktLoggedIn = false
+        traktUsername = nil
+        userDefaults.removeObject(forKey: DefaultsKey.traktUsername)
     }
 
     func logoutAniList() {
         SyncKeychainStore.remove(KeychainKey.aniListSession)
         isAniListLoggedIn = false
+        aniListUsername = nil
+        userDefaults.removeObject(forKey: DefaultsKey.aniListUsername)
     }
 
 #if os(iOS)
@@ -190,6 +208,7 @@ final class ProgressSyncManager: NSObject, ObservableObject {
 
         saveSession(token, for: .trakt)
         isTraktLoggedIn = true
+        await refreshTraktUsername()
         Logger.shared.log("Trakt login successful", type: "Sync")
     }
 
@@ -231,7 +250,71 @@ final class ProgressSyncManager: NSObject, ObservableObject {
 
         saveSession(token, for: .anilist)
         isAniListLoggedIn = true
+        await refreshAniListUsername()
         Logger.shared.log("AniList login successful", type: "Sync")
+    }
+
+    private func refreshTraktUsername() async {
+        do {
+            let token = try await validToken(for: .trakt)
+            let clientId = traktClientId()
+            guard !clientId.isEmpty else { return }
+
+            let data = try await getRaw(
+                url: "https://api.trakt.tv/users/settings",
+                additionalHeaders: [
+                    "Authorization": "Bearer \(token)",
+                    "trakt-api-version": "2",
+                    "trakt-api-key": clientId
+                ]
+            )
+
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let user = json["user"] as? [String: Any] else {
+                return
+            }
+
+            let resolvedName = (user["username"] as? String) ?? (user["name"] as? String)
+            let cleanName = resolvedName?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let cleanName, !cleanName.isEmpty {
+                traktUsername = cleanName
+                userDefaults.set(cleanName, forKey: DefaultsKey.traktUsername)
+            }
+        } catch {
+            Logger.shared.log("Failed to load Trakt username: \(error.localizedDescription)", type: "Sync")
+        }
+    }
+
+    private func refreshAniListUsername() async {
+        do {
+            let token = try await validToken(for: .anilist)
+            let payload: [String: Any] = [
+                "query": "query { Viewer { name } }"
+            ]
+
+            let data = try await postJSONRaw(
+                url: "https://graphql.anilist.co",
+                payload: payload,
+                additionalHeaders: [
+                    "Authorization": "Bearer \(token)"
+                ]
+            )
+
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let dataObject = json["data"] as? [String: Any],
+                  let viewer = dataObject["Viewer"] as? [String: Any],
+                  let name = viewer["name"] as? String else {
+                return
+            }
+
+            let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !cleanName.isEmpty {
+                aniListUsername = cleanName
+                userDefaults.set(cleanName, forKey: DefaultsKey.aniListUsername)
+            }
+        } catch {
+            Logger.shared.log("Failed to load AniList username: \(error.localizedDescription)", type: "Sync")
+        }
     }
 
     private func runAuthSession(url: URL) async throws -> URL {
@@ -550,6 +633,30 @@ final class ProgressSyncManager: NSObject, ObservableObject {
         return data
     }
 
+    private func getRaw(url: String, additionalHeaders: [String: String]) async throws -> Data {
+        guard let endpoint = URL(string: url) else { throw SyncError.invalidEndpoint(url) }
+
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "GET"
+
+        for (header, value) in additionalHeaders {
+            request.setValue(value, forHTTPHeaderField: header)
+        }
+
+        let (data, response) = try await networkSession.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw SyncError.requestFailed("Invalid HTTP response")
+        }
+
+        guard (200...299).contains(httpResponse.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? "<empty>"
+            throw SyncError.requestFailed("HTTP \(httpResponse.statusCode): \(body)")
+        }
+
+        return data
+    }
+
     private func saveSession(_ token: OAuthTokenResponse, for provider: SyncProvider) {
         let session = sessionFromTokenResponse(token)
         saveSession(session, for: provider)
@@ -568,8 +675,14 @@ final class ProgressSyncManager: NSObject, ObservableObject {
     private func clearSession(for provider: SyncProvider) {
         SyncKeychainStore.remove(keychainKey(for: provider))
         switch provider {
-        case .trakt: isTraktLoggedIn = false
-        case .anilist: isAniListLoggedIn = false
+        case .trakt:
+            isTraktLoggedIn = false
+            traktUsername = nil
+            userDefaults.removeObject(forKey: DefaultsKey.traktUsername)
+        case .anilist:
+            isAniListLoggedIn = false
+            aniListUsername = nil
+            userDefaults.removeObject(forKey: DefaultsKey.aniListUsername)
         }
     }
 
