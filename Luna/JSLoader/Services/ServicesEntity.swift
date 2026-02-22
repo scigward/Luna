@@ -63,7 +63,7 @@ extension ServiceEntity {
         if id == nil {
             let temp = UUID()
             id = temp
-            Logger.shared.log("CloudKit added empty ServiceEntity: \(temp)", type: "CloudKit")
+            Logger.shared.log("Added empty ServiceEntity: \(temp)", type: "ServiceStore")
         }
     }
 }
@@ -82,7 +82,7 @@ extension ServiceEntity {
         }
 
         guard let data = jsonMetadata.data(using: .utf8) else {
-            Logger.shared.log("ServiceEntity jsonMetadata is empty", type: "CloudKit")
+            Logger.shared.log("ServiceEntity jsonMetadata is empty", type: "ServiceStore")
             return nil
         }
 
@@ -90,12 +90,12 @@ extension ServiceEntity {
         do {
             metadata = try JSONDecoder().decode(ServiceMetadata.self, from: data)
         } catch {
-            Logger.shared.log("Failed to decode ServiceMetadata for ServiceEntity \(id.uuidString): \(error.localizedDescription)", type: "CloudKit")
+            Logger.shared.log("Failed to decode ServiceMetadata for ServiceEntity \(id.uuidString): \(error.localizedDescription)", type: "ServiceStore")
             return nil
         }
 
         guard let metadata else {
-            Logger.shared.log("ServiceEntity jsonMetadata is malformed", type: "CloudKit")
+            Logger.shared.log("ServiceEntity jsonMetadata is malformed", type: "ServiceStore")
             return nil
         }
 

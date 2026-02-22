@@ -132,7 +132,6 @@
 /* Begin PBXFileReference section */
 		12201F502EBE91870033073C /* ServiceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceStore.swift; sourceTree = "<group>"; };
 		12201F532EBE922D0033073C /* ServiceModels.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = ServiceModels.xcdatamodel; sourceTree = "<group>"; };
-		1240112B2EFF3B8B00CEC6EB /* Luna.local.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Luna.local.entitlements; sourceTree = "<group>"; };
 		129CC90B2EBA920A00D2D84B /* Bundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Bundle.swift; sourceTree = "<group>"; };
 		12DF1FC12F040D6500E80375 /* AdaptiveConfirmationDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveConfirmationDialog.swift; sourceTree = "<group>"; };
 		12E7AF5F2EB80771003B7664 /* Platform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Platform.swift; sourceTree = "<group>"; };
@@ -535,7 +534,6 @@
 				13F0727D2E4B2D9000EF90EB /* ContentView.swift */,
 				13F072622E4B2D3700EF90EB /* Assets.xcassets */,
 				13F072642E4B2D3700EF90EB /* Luna.entitlements */,
-				1240112B2EFF3B8B00CEC6EB /* Luna.local.entitlements */,
 			);
 			path = Luna;
 			sourceTree = "<group>";
