@@ -104,6 +104,7 @@ final class MPVSoftwareRenderer {
     private var subtitleRenderCache: SubtitleRenderCache?
     private var lastRenderDimensions: CGSize = .zero
     private let subtitleUpdateInterval: Double = 0.5
+    private var shouldBurn = false
     
     var isPausedState: Bool {
         return isPaused
@@ -525,7 +526,9 @@ final class MPVSoftwareRenderer {
         
         CVPixelBufferUnlockBaseAddress(buffer, [])
         
-        if let style = delegate?.renderer(self, getSubtitleStyle: ()), style.isVisible {
+        if shouldBurn,
+           let style = delegate?.renderer(self, getSubtitleStyle: ()),
+           style.isVisible {
             let currentTime = cachedPosition
             let timeDelta = abs(currentTime - lastSubtitleCheckTime)
             
@@ -1221,5 +1224,17 @@ final class MPVSoftwareRenderer {
         var speed: Double = 1.0
         getProperty(handle: handle, name: "speed", format: MPV_FORMAT_DOUBLE, value: &speed)
         return speed
+    }
+
+    func setSubtitleBurnInEnabled(_ enabled: Bool) {
+        renderQueue.async { [weak self] in
+            guard let self else { return }
+            self.shouldBurn = enabled
+            if !enabled {
+                self.subtitleRenderCache = nil
+                self.lastSubtitleCheckTime = -1.0
+                self.cachedSubtitleText = nil
+            }
+        }
     }
 }

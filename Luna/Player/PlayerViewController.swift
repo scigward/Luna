@@ -184,6 +184,7 @@ final class PlayerViewController: UIViewController {
         return v
     }()
     private var progressHostingController: UIHostingController<AnyView>?
+    private var subtitleHostingController: UIHostingController<AnyView>?
     private var lastHostedDuration: Double = 0
     
     class ProgressModel: ObservableObject {
@@ -210,6 +211,8 @@ final class PlayerViewController: UIViewController {
     private var subtitleURLs: [String] = []
     private var currentSubtitleIndex: Int = 0
     private var subtitleEntries: [SubtitleEntry] = []
+    private var subtitleSearchIndex: Int = 0
+    private var isSubtitleBurnInEnabledForPiP: Bool = false
     
     class SubtitleModel: ObservableObject {
         @Published var currentAttributedText: NSAttributedString = NSAttributedString()
@@ -327,6 +330,7 @@ final class PlayerViewController: UIViewController {
         }
         
         updateProgressHostingController()
+        setupSubtitleOverlayIfNeeded()
         
         NotificationCenter.default.addObserver(self, selector: #selector(appDidEnterBackground), name: UIApplication.didEnterBackgroundNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(appWillEnterForeground), name: UIApplication.willEnterForegroundNotification, object: nil)
@@ -744,7 +748,10 @@ final class PlayerViewController: UIViewController {
     private func updateCurrentSubtitleAppearance() {
         if subtitleModel.isVisible && currentSubtitleIndex < subtitleURLs.count {
             loadCurrentSubtitle()
+        } else {
+            subtitleModel.currentAttributedText = NSAttributedString()
         }
+        updateSubtitleOverlayVisibility()
     }
     
     private func updateSubtitleButtonAppearance() {
@@ -752,6 +759,7 @@ final class PlayerViewController: UIViewController {
         let imageName = subtitleModel.isVisible ? "captions.bubble.fill" : "captions.bubble"
         let img = UIImage(systemName: imageName, withConfiguration: cfg)
         subtitleButton.setImage(img, for: .normal)
+        updateSubtitleOverlayVisibility()
     }
     
     private func loadSubtitles(_ urls: [String]) {
@@ -760,10 +768,14 @@ final class PlayerViewController: UIViewController {
         if !urls.isEmpty {
             subtitleButton.isHidden = false
             currentSubtitleIndex = 0
+            subtitleSearchIndex = 0
             subtitleModel.isVisible = true
             loadCurrentSubtitle()
             updateSubtitleButtonAppearance()
             updateSubtitleMenu()
+        } else {
+            subtitleModel.currentAttributedText = NSAttributedString()
+            updateSubtitleOverlayVisibility()
         }
     }
     
@@ -795,7 +807,134 @@ final class PlayerViewController: UIViewController {
     
     private func parseAndDisplaySubtitles(_ content: String) {
         subtitleEntries = SubtitleLoader.parseSubtitles(from: content, fontSize: subtitleModel.fontSize, foregroundColor: subtitleModel.foregroundColor)
+        subtitleSearchIndex = 0
+        subtitleModel.currentAttributedText = NSAttributedString()
         Logger.shared.log("Loaded \(subtitleEntries.count) subtitle entries", type: "Info")
+    }
+
+    private func setupSubtitleOverlayIfNeeded() {
+        struct SubtitleOverlayView: View {
+            @ObservedObject var model: SubtitleModel
+
+            var body: some View {
+                VStack {
+                    Spacer(minLength: 0)
+                    if model.isVisible, model.currentAttributedText.length > 0 {
+                        Text(model.currentAttributedText.string)
+                            .multilineTextAlignment(.center)
+                            .font(.system(size: model.fontSize, weight: .bold))
+                            .foregroundStyle(Color(uiColor: model.foregroundColor))
+                            .shadow(color: Color(uiColor: model.strokeColor), radius: model.strokeWidth, x: 0, y: 0)
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .padding(.bottom, 62)
+                .allowsHitTesting(false)
+            }
+        }
+
+        guard subtitleHostingController == nil else { return }
+
+        let host = UIHostingController(rootView: AnyView(SubtitleOverlayView(model: subtitleModel)))
+        subtitleHostingController = host
+        addChild(host)
+        host.view.translatesAutoresizingMaskIntoConstraints = false
+        host.view.backgroundColor = .clear
+        host.view.isOpaque = false
+        host.view.isUserInteractionEnabled = false
+        videoContainer.addSubview(host.view)
+        NSLayoutConstraint.activate([
+            host.view.topAnchor.constraint(equalTo: videoContainer.topAnchor),
+            host.view.bottomAnchor.constraint(equalTo: videoContainer.bottomAnchor),
+            host.view.leadingAnchor.constraint(equalTo: videoContainer.leadingAnchor),
+            host.view.trailingAnchor.constraint(equalTo: videoContainer.trailingAnchor)
+        ])
+        videoContainer.bringSubviewToFront(host.view)
+        host.didMove(toParent: self)
+        updateSubtitleOverlayVisibility()
+    }
+
+    private func updateSubtitleOverlayVisibility() {
+        subtitleHostingController?.view.isHidden = isSubtitleBurnInEnabledForPiP || !subtitleModel.isVisible
+    }
+
+    private func findSubtitleIndex(at time: Double) -> Int? {
+        guard !subtitleEntries.isEmpty else { return nil }
+
+        var low = 0
+        var high = subtitleEntries.count - 1
+
+        while low <= high {
+            let mid = (low + high) / 2
+            let entry = subtitleEntries[mid]
+            if time < entry.startTime {
+                high = mid - 1
+            } else if time > entry.endTime {
+                low = mid + 1
+            } else {
+                return mid
+            }
+        }
+        return nil
+    }
+
+    private func subtitleEntry(at time: Double) -> SubtitleEntry? {
+        guard !subtitleEntries.isEmpty else { return nil }
+
+        if subtitleSearchIndex >= subtitleEntries.count {
+            subtitleSearchIndex = max(subtitleEntries.count - 1, 0)
+        }
+
+        let current = subtitleEntries[subtitleSearchIndex]
+        if current.startTime <= time, time <= current.endTime {
+            return current
+        }
+
+        if subtitleSearchIndex + 1 < subtitleEntries.count {
+            let next = subtitleEntries[subtitleSearchIndex + 1]
+            if next.startTime <= time, time <= next.endTime {
+                subtitleSearchIndex += 1
+                return next
+            }
+        }
+
+        if subtitleSearchIndex > 0 {
+            let previous = subtitleEntries[subtitleSearchIndex - 1]
+            if previous.startTime <= time, time <= previous.endTime {
+                subtitleSearchIndex -= 1
+                return previous
+            }
+        }
+
+        if let index = findSubtitleIndex(at: time) {
+            subtitleSearchIndex = index
+            return subtitleEntries[index]
+        }
+
+        return nil
+    }
+
+    private func updateSubtitleOverlay(for time: Double) {
+        guard subtitleModel.isVisible else {
+            if subtitleModel.currentAttributedText.length > 0 {
+                subtitleModel.currentAttributedText = NSAttributedString()
+            }
+            return
+        }
+
+        guard let entry = subtitleEntry(at: time) else {
+            if subtitleModel.currentAttributedText.length > 0 {
+                subtitleModel.currentAttributedText = NSAttributedString()
+            }
+            return
+        }
+
+        if !subtitleModel.currentAttributedText.isEqual(to: entry.attributedText) {
+            subtitleModel.currentAttributedText = entry.attributedText
+        }
     }
     
     @objc private func subtitleButtonTapped() {
@@ -1093,6 +1232,7 @@ final class PlayerViewController: UIViewController {
             }
             self.progressModel.position = position
             self.progressModel.duration = max(duration, 1.0)
+            self.updateSubtitleOverlay(for: position)
             
             if self.pipController?.isPictureInPictureActive == true {
                 self.pipController?.updatePlaybackState()
@@ -1164,12 +1304,8 @@ extension PlayerViewController: MPVSoftwareRendererDelegate {
         guard subtitleModel.isVisible, !subtitleEntries.isEmpty else {
             return nil
         }
-        
-        if let entry = subtitleEntries.first(where: { $0.startTime <= time && time <= $0.endTime }) {
-            return entry.attributedText
-        }
-        
-        return nil
+
+        return subtitleEntry(at: time)?.attributedText
     }
     
     func renderer(_ renderer: MPVSoftwareRenderer, getSubtitleStyle: Void) -> SubtitleStyle {
@@ -1187,13 +1323,27 @@ extension PlayerViewController: MPVSoftwareRendererDelegate {
 // MARK: - PiP Support
 extension PlayerViewController: PiPControllerDelegate {
     func pipController(_ controller: PiPController, willStartPictureInPicture: Bool) {
+        isSubtitleBurnInEnabledForPiP = true
+        renderer.setSubtitleBurnInEnabled(true)
+        updateSubtitleOverlayVisibility()
         pipController?.updatePlaybackState()
     }
     func pipController(_ controller: PiPController, didStartPictureInPicture: Bool) {
+        isSubtitleBurnInEnabledForPiP = didStartPictureInPicture
+        renderer.setSubtitleBurnInEnabled(didStartPictureInPicture)
+        updateSubtitleOverlayVisibility()
         pipController?.updatePlaybackState()
     }
-    func pipController(_ controller: PiPController, willStopPictureInPicture: Bool) { }
-    func pipController(_ controller: PiPController, didStopPictureInPicture: Bool) { }
+    func pipController(_ controller: PiPController, willStopPictureInPicture: Bool) {
+        isSubtitleBurnInEnabledForPiP = false
+        renderer.setSubtitleBurnInEnabled(false)
+        updateSubtitleOverlayVisibility()
+    }
+    func pipController(_ controller: PiPController, didStopPictureInPicture: Bool) {
+        isSubtitleBurnInEnabledForPiP = false
+        renderer.setSubtitleBurnInEnabled(false)
+        updateSubtitleOverlayVisibility()
+    }
     func pipController(_ controller: PiPController, restoreUserInterfaceForPictureInPictureStop completionHandler: @escaping (Bool) -> Void) {
         if presentedViewController != nil {
             dismiss(animated: true) { completionHandler(true) }

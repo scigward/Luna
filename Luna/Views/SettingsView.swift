@@ -157,6 +157,8 @@ struct SettingsView: View {
                 Text("MICS")
             }
             
+            Section(footer: Text("Luna 1.0.0 - cranci1")) {}
+            
             Section{
                 Text("Switch to Kanzen")
                     .onTapGesture {
