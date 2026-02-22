@@ -15,7 +15,6 @@ struct SubtitleEntry {
 }
 
 class SubtitleLoader {
-    
     static func parseSubtitles(from content: String, fontSize: CGFloat = 18.0, foregroundColor: UIColor = .white) -> [SubtitleEntry] {
         if content.contains("WEBVTT") {
             return parseVTT(content, fontSize: fontSize, foregroundColor: foregroundColor)
