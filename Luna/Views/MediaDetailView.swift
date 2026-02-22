@@ -7,9 +7,16 @@
 
 import SwiftUI
 import Kingfisher
+import AVKit
+
+private struct ModuleDetailContext {
+    let item: SearchItem
+    let service: Service
+}
 
 struct MediaDetailView: View {
     let searchResult: TMDBSearchResult
+    private let moduleContext: ModuleDetailContext?
     
     @StateObject private var tmdbService = TMDBService.shared
     @State private var movieDetail: TMDBMovieDetail?
@@ -29,6 +36,11 @@ struct MediaDetailView: View {
     @State private var selectedEpisodeForSearch: TMDBEpisode?
     @State private var romajiTitle: String?
     @State private var logoURL: String?
+    @State private var moduleDetails: [MediaItem] = []
+    @State private var moduleEpisodes: [EpisodeLink] = []
+    @State private var selectedModuleEpisodeIndex: Int = 0
+    @State private var moduleStreamError: String?
+    @State private var showingModuleStreamError = false
     
     @StateObject private var serviceManager = ServiceManager.shared
     @ObservedObject private var libraryManager = LibraryManager.shared
@@ -37,6 +49,30 @@ struct MediaDetailView: View {
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @AppStorage("useSolidBackgroundBehindHero") private var useSolidBackgroundBehindHero = false
     @AppStorage("tmdbLanguage") private var selectedLanguage = "en-US"
+
+    init(searchResult: TMDBSearchResult) {
+        self.searchResult = searchResult
+        self.moduleContext = nil
+    }
+
+    init(moduleItem: SearchItem, service: Service) {
+        self.searchResult = TMDBSearchResult(
+            id: abs(moduleItem.href.hashValue),
+            mediaType: "tv",
+            title: moduleItem.title,
+            name: nil,
+            overview: nil,
+            posterPath: nil,
+            backdropPath: nil,
+            releaseDate: nil,
+            firstAirDate: nil,
+            voteAverage: nil,
+            popularity: 0,
+            adult: nil,
+            genreIds: nil
+        )
+        self.moduleContext = ModuleDetailContext(item: moduleItem, service: service)
+    }
 
     private var headerHeight: CGFloat {
 #if os(tvOS)
@@ -58,8 +94,38 @@ struct MediaDetailView: View {
     private var isCompactLayout: Bool {
         return verticalSizeClass == .compact
     }
+
+    private var isModuleMode: Bool {
+        moduleContext != nil
+    }
+
+    private var isMovieContent: Bool {
+        if isModuleMode {
+            return moduleEpisodes.isEmpty
+        }
+        return searchResult.isMovie
+    }
+
+    private var canPlayModule: Bool {
+        if !isModuleMode {
+            return !serviceManager.activeServices.isEmpty
+        }
+        if moduleEpisodes.isEmpty {
+            return moduleContext != nil
+        }
+        return selectedModuleEpisodeIndex >= 0 && selectedModuleEpisodeIndex < moduleEpisodes.count
+    }
     
     private var playButtonText: String {
+        if isModuleMode {
+            if moduleEpisodes.isEmpty {
+                return "Play"
+            }
+            let safeIndex = min(max(selectedModuleEpisodeIndex, 0), max(moduleEpisodes.count - 1, 0))
+            let episodeNumber = moduleEpisodes[safeIndex].number
+            return "Play Episode \(episodeNumber)"
+        }
+
         if searchResult.isMovie {
             return "Play"
         } else if let selectedEpisode = selectedEpisodeForSearch {
@@ -104,10 +170,14 @@ struct MediaDetailView: View {
 #endif
         .onAppear {
             loadMediaDetails()
-            updateBookmarkStatus()
+            if !isModuleMode {
+                updateBookmarkStatus()
+            }
         }
         .onChangeComp(of: libraryManager.collections) { _, _ in
-            updateBookmarkStatus()
+            if !isModuleMode {
+                updateBookmarkStatus()
+            }
         }
         .sheet(isPresented: $showingSearchResults) {
             ModulesSearchResultsSheet(
@@ -120,6 +190,13 @@ struct MediaDetailView: View {
         }
         .sheet(isPresented: $showingAddToCollection) {
             AddToCollectionView(searchResult: searchResult)
+        }
+        .alert("Stream Error", isPresented: $showingModuleStreamError) {
+            Button("OK", role: .cancel) {
+                moduleStreamError = nil
+            }
+        } message: {
+            Text(moduleStreamError ?? "Failed to start playback")
         }
     }
     
@@ -199,13 +276,17 @@ struct MediaDetailView: View {
         ZStack(alignment: .bottom) {
             StretchyHeaderView(
                 backdropURL: {
+                    if isModuleMode {
+                        return moduleContext?.item.imageUrl
+                    }
+
                     if searchResult.isMovie {
                         return movieDetail?.fullBackdropURL ?? movieDetail?.fullPosterURL
                     } else {
                         return tvShowDetail?.fullBackdropURL ?? tvShowDetail?.fullPosterURL
                     }
                 }(),
-                isMovie: searchResult.isMovie,
+                isMovie: isMovieContent,
                 headerHeight: headerHeight,
                 minHeaderHeight: minHeaderHeight,
                 onAmbientColorExtracted: { color in
@@ -225,7 +306,10 @@ struct MediaDetailView: View {
                 synopsisSection
                 playAndBookmarkSection
                 
-                if searchResult.isMovie {
+                if isModuleMode {
+                    moduleDetailsSection
+                    episodesSection
+                } else if searchResult.isMovie {
                     MovieDetailsSection(movie: movieDetail)
                 } else {
                     episodesSection
@@ -325,9 +409,9 @@ struct MediaDetailView: View {
                 searchInServices()
             }) {
                 HStack {
-                    Image(systemName: serviceManager.activeServices.isEmpty ? "exclamationmark.triangle" : "play.fill")
+                    Image(systemName: canPlayModule ? "play.fill" : "exclamationmark.triangle")
                     
-                    Text(serviceManager.activeServices.isEmpty ? "No Services" : playButtonText)
+                    Text(canPlayModule ? playButtonText : "No Services")
                         .fontWeight(.semibold)
                 }
                 .frame(maxWidth: .infinity)
@@ -335,35 +419,37 @@ struct MediaDetailView: View {
                 .padding(.horizontal, 25)
                 .applyLiquidGlassBackground(
                     cornerRadius: 12,
-                    fallbackFill: serviceManager.activeServices.isEmpty ? Color.gray.opacity(0.3) : Color.black.opacity(0.2),
-                    fallbackMaterial: serviceManager.activeServices.isEmpty ? .thinMaterial : .ultraThinMaterial,
-                    glassTint: serviceManager.activeServices.isEmpty ? Color.gray.opacity(0.3) : nil
+                    fallbackFill: canPlayModule ? Color.black.opacity(0.2) : Color.gray.opacity(0.3),
+                    fallbackMaterial: canPlayModule ? .ultraThinMaterial : .thinMaterial,
+                    glassTint: canPlayModule ? nil : Color.gray.opacity(0.3)
                 )
-                .foregroundColor(serviceManager.activeServices.isEmpty ? .secondary : .white)
+                .foregroundColor(canPlayModule ? .white : .secondary)
                 .cornerRadius(8)
             }
-            .disabled(serviceManager.activeServices.isEmpty)
+            .disabled(!canPlayModule)
             
-            Button(action: {
-                toggleBookmark()
-            }) {
-                Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
-                    .font(.title2)
-                    .frame(width: 42, height: 42)
-                    .applyLiquidGlassBackground(cornerRadius: 12)
-                    .foregroundColor(isBookmarked ? .yellow : .white)
-                    .cornerRadius(8)
-            }
-            
-            Button(action: {
-                showingAddToCollection = true
-            }) {
-                Image(systemName: "plus")
-                    .font(.title2)
-                    .frame(width: 42, height: 42)
-                    .applyLiquidGlassBackground(cornerRadius: 12)
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
+            if !isModuleMode {
+                Button(action: {
+                    toggleBookmark()
+                }) {
+                    Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
+                        .font(.title2)
+                        .frame(width: 42, height: 42)
+                        .applyLiquidGlassBackground(cornerRadius: 12)
+                        .foregroundColor(isBookmarked ? .yellow : .white)
+                        .cornerRadius(8)
+                }
+                
+                Button(action: {
+                    showingAddToCollection = true
+                }) {
+                    Image(systemName: "plus")
+                        .font(.title2)
+                        .frame(width: 42, height: 42)
+                        .applyLiquidGlassBackground(cornerRadius: 12)
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                }
             }
         }
         .padding(.horizontal)
@@ -371,7 +457,24 @@ struct MediaDetailView: View {
     
     @ViewBuilder
     private var episodesSection: some View {
-        if !searchResult.isMovie {
+        if isModuleMode {
+            if !moduleEpisodes.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Episodes")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    
+                    Picker("Episode", selection: $selectedModuleEpisodeIndex) {
+                        ForEach(Array(moduleEpisodes.enumerated()), id: \.offset) { index, episode in
+                            Text("Episode \(episode.number)").tag(index)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .tint(.white)
+                }
+                .padding(.horizontal)
+            }
+        } else if !searchResult.isMovie {
             TVShowSeasonsSection(
                 tvShow: tvShowDetail,
                 selectedSeason: $selectedSeason,
@@ -381,8 +484,28 @@ struct MediaDetailView: View {
             )
         }
     }
+
+    @ViewBuilder
+    private var moduleDetailsSection: some View {
+        if let detail = moduleDetails.first {
+            VStack(alignment: .leading, spacing: 8) {
+                if !detail.aliases.isEmpty {
+                    Text("Aliases: \(detail.aliases)")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.9))
+                }
+                if !detail.airdate.isEmpty {
+                    Text("Airdate: \(detail.airdate)")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.9))
+                }
+            }
+            .padding(.horizontal)
+        }
+    }
     
     private func toggleBookmark() {
+        guard !isModuleMode else { return }
         withAnimation(.easeInOut(duration: 0.2)) {
             libraryManager.toggleBookmark(for: searchResult)
             updateBookmarkStatus()
@@ -390,10 +513,16 @@ struct MediaDetailView: View {
     }
     
     private func updateBookmarkStatus() {
+        guard !isModuleMode else { return }
         isBookmarked = libraryManager.isBookmarked(searchResult)
     }
     
     private func searchInServices() {
+        if isModuleMode {
+            searchInModuleService()
+            return
+        }
+
         // This function will only be called when services are available
         // since the button is disabled when no services are active
         
@@ -414,6 +543,11 @@ struct MediaDetailView: View {
     private func loadMediaDetails() {
         isLoading = true
         errorMessage = nil
+
+        if isModuleMode {
+            loadModuleDetails()
+            return
+        }
         
         Task {
             do {
@@ -461,5 +595,204 @@ struct MediaDetailView: View {
                 }
             }
         }
+    }
+
+    private func loadModuleDetails() {
+        guard let moduleContext else {
+            errorMessage = "Missing module context"
+            isLoading = false
+            return
+        }
+
+        let jsController = JSController()
+        jsController.loadScript(moduleContext.service.jsScript)
+
+        jsController.fetchDetailsJS(url: moduleContext.item.href) { details, episodes in
+            DispatchQueue.main.async {
+                self.moduleDetails = details
+                self.moduleEpisodes = episodes
+                self.selectedModuleEpisodeIndex = 0
+                if let firstDetail = details.first {
+                    self.synopsis = firstDetail.description
+                }
+                self.isLoading = false
+            }
+        }
+    }
+
+    private func searchInModuleService() {
+        guard let moduleContext else { return }
+
+        let jsController = JSController()
+        jsController.loadScript(moduleContext.service.jsScript)
+
+        let targetHref: String
+        if moduleEpisodes.isEmpty {
+            targetHref = moduleContext.item.href
+        } else {
+            let safeIndex = min(max(selectedModuleEpisodeIndex, 0), moduleEpisodes.count - 1)
+            targetHref = moduleEpisodes[safeIndex].href
+        }
+
+        jsController.fetchStreamUrlJS(
+            episodeUrl: targetHref,
+            softsub: moduleContext.service.metadata.softsub ?? false,
+            module: moduleContext.service
+        ) { streamResult in
+            Task { @MainActor in
+                guard let stream = self.extractPreferredStream(streams: streamResult.streams, sources: streamResult.sources) else {
+                    self.moduleStreamError = "No valid stream returned by this service"
+                    self.showingModuleStreamError = true
+                    return
+                }
+
+                let subtitle = streamResult.subtitles?.first
+                self.playStreamURL(stream.url, service: moduleContext.service, subtitle: subtitle, headers: stream.headers)
+            }
+        }
+    }
+
+    private func extractPreferredStream(streams: [String]?, sources: [[String: Any]]?) -> (url: String, headers: [String: String]?)? {
+        if let source = sources?.first,
+           let url = source["url"] as? String,
+           !url.isEmpty {
+            return (url, safeConvertToHeaders(source["headers"]))
+        }
+
+        if let streamUrl = streams?.first,
+           !streamUrl.isEmpty {
+            return (streamUrl, nil)
+        }
+
+        return nil
+    }
+
+    private func playStreamURL(_ url: String, service: Service, subtitle: String?, headers: [String: String]?) {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 300_000_000)
+
+            guard let streamURL = URL(string: url) else {
+                Logger.shared.log("Invalid stream URL: \(url)", type: "Error")
+                moduleStreamError = "Invalid stream URL. The source returned a malformed URL."
+                showingModuleStreamError = true
+                return
+            }
+
+            let externalRaw = UserDefaults.standard.string(forKey: "externalPlayer") ?? ExternalPlayer.none.rawValue
+            let external = ExternalPlayer(rawValue: externalRaw) ?? .none
+            let schemeUrl = external.schemeURL(for: url)
+
+            if let scheme = schemeUrl, UIApplication.shared.canOpenURL(scheme) {
+                UIApplication.shared.open(scheme, options: [:], completionHandler: nil)
+                Logger.shared.log("Opening external player with scheme: \(scheme)", type: "General")
+                return
+            }
+
+            let serviceURL = service.metadata.baseUrl
+            var finalHeaders: [String: String] = [
+                "Origin": serviceURL,
+                "Referer": serviceURL,
+                "User-Agent": URLSession.randomUserAgent
+            ]
+
+            if let custom = headers {
+                for (k, v) in custom {
+                    finalHeaders[k] = v
+                }
+                if finalHeaders["User-Agent"] == nil {
+                    finalHeaders["User-Agent"] = URLSession.randomUserAgent
+                }
+            }
+
+            let inAppRaw = UserDefaults.standard.string(forKey: "inAppPlayer") ?? "Normal"
+            let inAppPlayer = (inAppRaw == "mpv") ? "mpv" : "Normal"
+
+            if inAppPlayer == "mpv" {
+                let preset = PlayerPreset.presets.first
+                let subtitleArray: [String]? = subtitle.map { [$0] }
+                let pvc = PlayerViewController(
+                    url: streamURL,
+                    preset: preset ?? PlayerPreset(title: "Default", summary: "", stream: nil, commands: []),
+                    headers: finalHeaders,
+                    subtitles: subtitleArray
+                )
+                if !isModuleMode {
+                    if searchResult.isMovie {
+                        pvc.mediaInfo = .movie(id: searchResult.id, title: searchResult.displayTitle)
+                    } else if let episode = selectedEpisodeForSearch {
+                        pvc.mediaInfo = .episode(showId: searchResult.id, seasonNumber: episode.seasonNumber, episodeNumber: episode.episodeNumber)
+                    }
+                }
+                pvc.modalPresentationStyle = .fullScreen
+
+                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                   let rootVC = windowScene.windows.first?.rootViewController {
+                    rootVC.topmostViewController().present(pvc, animated: true, completion: nil)
+                }
+                return
+            }
+
+            let playerVC = NormalPlayer()
+            let asset = AVURLAsset(url: streamURL, options: ["AVURLAssetHTTPHeaderFieldsKey": finalHeaders])
+            let item = AVPlayerItem(asset: asset)
+            playerVC.player = AVPlayer(playerItem: item)
+            if !isModuleMode {
+                if searchResult.isMovie {
+                    playerVC.mediaInfo = .movie(id: searchResult.id, title: searchResult.displayTitle)
+                } else if let episode = selectedEpisodeForSearch {
+                    playerVC.mediaInfo = .episode(showId: searchResult.id, seasonNumber: episode.seasonNumber, episodeNumber: episode.episodeNumber)
+                }
+            }
+            playerVC.modalPresentationStyle = .fullScreen
+
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let rootVC = windowScene.windows.first?.rootViewController {
+                rootVC.topmostViewController().present(playerVC, animated: true) {
+                    playerVC.player?.play()
+                }
+            } else {
+                playerVC.player?.play()
+            }
+        }
+    }
+
+    private func safeConvertToHeaders(_ value: Any?) -> [String: String]? {
+        guard let value = value else { return nil }
+        if value is NSNull { return nil }
+
+        if let headers = value as? [String: String] {
+            return headers
+        }
+
+        if let headersAny = value as? [String: Any] {
+            var safeHeaders: [String: String] = [:]
+            for (key, val) in headersAny {
+                if let stringValue = val as? String {
+                    safeHeaders[key] = stringValue
+                } else if let numberValue = val as? NSNumber {
+                    safeHeaders[key] = numberValue.stringValue
+                } else if !(val is NSNull) {
+                    safeHeaders[key] = String(describing: val)
+                }
+            }
+            return safeHeaders.isEmpty ? nil : safeHeaders
+        }
+
+        if let headersAny = value as? [AnyHashable: Any] {
+            var safeHeaders: [String: String] = [:]
+            for (key, val) in headersAny {
+                let stringKey = String(describing: key)
+                if let stringValue = val as? String {
+                    safeHeaders[stringKey] = stringValue
+                } else if let numberValue = val as? NSNumber {
+                    safeHeaders[stringKey] = numberValue.stringValue
+                } else if !(val is NSNull) {
+                    safeHeaders[stringKey] = String(describing: val)
+                }
+            }
+            return safeHeaders.isEmpty ? nil : safeHeaders
+        }
+
+        return nil
     }
 }

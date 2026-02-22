@@ -504,31 +504,34 @@ struct ServiceSearchResultCard: View {
     let service: Service
     
     var body: some View {
-        VStack(spacing: 8) {
-            KFImage(URL(string: item.imageUrl))
-                .placeholder {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.3))
-                        .overlay(
-                            Image(systemName: "photo")
-                                .foregroundColor(.gray)
-                        )
-                }
-                .resizable()
-                .aspectRatio(2/3, contentMode: .fill)
-                .frame(height: 180)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
-            
-            Text(item.title)
-                .font(.caption)
-                .fontWeight(.medium)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .frame(height: 34)
-                .foregroundColor(.primary)
+        NavigationLink(destination: MediaDetailView(moduleItem: item, service: service)) {
+            VStack(spacing: 8) {
+                KFImage(URL(string: item.imageUrl))
+                    .placeholder {
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.3))
+                            .overlay(
+                                Image(systemName: "photo")
+                                    .foregroundColor(.gray)
+                            )
+                    }
+                    .resizable()
+                    .aspectRatio(2/3, contentMode: .fill)
+                    .frame(height: 180)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+                
+                Text(item.title)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .frame(height: 34)
+                    .foregroundColor(.primary)
+            }
+            .frame(maxWidth: .infinity)
         }
-        .frame(maxWidth: .infinity)
+        .buttonStyle(PlainButtonStyle())
     }
 }
 
