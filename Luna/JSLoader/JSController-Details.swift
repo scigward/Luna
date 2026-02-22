@@ -164,8 +164,13 @@ extension JSController {
                    let dataEpisodes = jsonOfEpisodes.data(using: .utf8) {
                     do {
                         if let array = try JSONSerialization.jsonObject(with: dataEpisodes, options: []) as? [[String: Any]] {
-                            episodeLinks = array.compactMap { item in
-                                parseEpisodeLink(from: item)
+                            episodeLinks = array.map { item -> EpisodeLink in
+                                EpisodeLink(
+                                    number: item["number"] as? Int ?? 0,
+                                    title: "",
+                                    href: item["href"] as? String ?? "",
+                                    duration: nil
+                                )
                             }
                         } else {
                             Logger.shared.log("Failed to parse JSON of extractEpisodes", type: "Error")
@@ -266,8 +271,13 @@ extension JSController {
                    let dataEpisodes = jsonOfEpisodes.data(using: .utf8) {
                     do {
                         if let array = try JSONSerialization.jsonObject(with: dataEpisodes, options: []) as? [[String: Any]] {
-                            episodeLinks = array.compactMap { item in
-                                parseEpisodeLink(from: item)
+                            episodeLinks = array.map { item -> EpisodeLink in
+                                EpisodeLink(
+                                    number: item["number"] as? Int ?? 0,
+                                    title: "",
+                                    href: item["href"] as? String ?? "",
+                                    duration: nil
+                                )
                             }
                         } else {
                             Logger.shared.log("Failed to parse JSON of extractEpisodes", type: "Error")
@@ -306,55 +316,5 @@ extension JSController {
         
         promiseEpisodes.invokeMethod("then", withArguments: [thenFunctionEpisodes as Any])
         promiseEpisodes.invokeMethod("catch", withArguments: [catchFunctionEpisodes as Any])
-    }
-
-    private func parseEpisodeLink(from item: [String: Any]) -> EpisodeLink? {
-        let hrefKeys = ["href", "url", "link", "episodeUrl"]
-        let titleKeys = ["title", "name", "episodeTitle"]
-        let numberKeys = ["number", "episode", "episodeNumber"]
-        let durationKeys = ["duration", "runtime"]
-
-        let href = hrefKeys
-            .compactMap { item[$0] as? String }
-            .first { !$0.isEmpty } ?? ""
-
-        let title = titleKeys
-            .compactMap { item[$0] as? String }
-            .first(where: { !$0.isEmpty }) ?? ""
-
-        var number = 0
-        for key in numberKeys {
-            if let intValue = item[key] as? Int {
-                number = intValue
-                break
-            }
-            if let stringValue = item[key] as? String, let parsed = Int(stringValue) {
-                number = parsed
-                break
-            }
-        }
-
-        var duration: Int?
-        for key in durationKeys {
-            if let intValue = item[key] as? Int {
-                duration = intValue
-                break
-            }
-            if let stringValue = item[key] as? String, let parsed = Int(stringValue) {
-                duration = parsed
-                break
-            }
-        }
-
-        if href.isEmpty {
-            return nil
-        }
-
-        return EpisodeLink(
-            number: number,
-            title: title,
-            href: href,
-            duration: duration
-        )
     }
 }

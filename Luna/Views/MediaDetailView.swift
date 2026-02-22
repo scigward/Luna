@@ -461,25 +461,16 @@ struct MediaDetailView: View {
             if !moduleEpisodes.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Episodes")
-                        .font(.title2)
-                        .fontWeight(.bold)
+                        .font(.headline)
                         .foregroundColor(.white)
-
-                    LazyVStack(spacing: 15) {
-                        ForEach(Array(moduleTMDBEpisodes.enumerated()), id: \.element.id) { index, episode in
-                            EpisodeCell(
-                                episode: episode,
-                                showId: searchResult.id,
-                                progress: 0,
-                                isSelected: selectedModuleEpisodeIndex == index,
-                                onTap: {
-                                    selectedModuleEpisodeIndex = index
-                                },
-                                onMarkWatched: {},
-                                onResetProgress: {}
-                            )
+                    
+                    Picker("Episode", selection: $selectedModuleEpisodeIndex) {
+                        ForEach(Array(moduleEpisodes.enumerated()), id: \.offset) { index, episode in
+                            Text("Episode \(episode.number)").tag(index)
                         }
                     }
+                    .pickerStyle(.menu)
+                    .tint(.white)
                 }
                 .padding(.horizontal)
             }
@@ -619,7 +610,7 @@ struct MediaDetailView: View {
         jsController.fetchDetailsJS(url: moduleContext.item.href) { details, episodes in
             DispatchQueue.main.async {
                 self.moduleDetails = details
-                self.moduleEpisodes = episodes.filter { !$0.href.isEmpty }
+                self.moduleEpisodes = episodes
                 self.selectedModuleEpisodeIndex = 0
                 if let firstDetail = details.first {
                     self.synopsis = firstDetail.description
@@ -643,12 +634,6 @@ struct MediaDetailView: View {
             targetHref = moduleEpisodes[safeIndex].href
         }
 
-        guard !targetHref.isEmpty else {
-            moduleStreamError = "Selected episode has no valid URL"
-            showingModuleStreamError = true
-            return
-        }
-
         jsController.fetchStreamUrlJS(
             episodeUrl: targetHref,
             softsub: moduleContext.service.metadata.softsub ?? false,
@@ -668,67 +653,18 @@ struct MediaDetailView: View {
     }
 
     private func extractPreferredStream(streams: [String]?, sources: [[String: Any]]?) -> (url: String, headers: [String: String]?)? {
-        if let sources, !sources.isEmpty {
-            for source in sources {
-                if let url = firstURLValue(in: source) {
-                    return (url, safeConvertToHeaders(source["headers"]))
-                }
-            }
+        if let source = sources?.first,
+           let url = source["url"] as? String,
+           !url.isEmpty {
+            return (url, safeConvertToHeaders(source["headers"]))
         }
 
-        if let streams, !streams.isEmpty {
-            if let direct = streams.first(where: { isURL($0) }) {
-                return (direct, nil)
-            }
-
-            var index = 0
-            while index < streams.count {
-                let entry = streams[index]
-                if isURL(entry) {
-                    return (entry, nil)
-                }
-                let nextIndex = index + 1
-                if nextIndex < streams.count, isURL(streams[nextIndex]) {
-                    return (streams[nextIndex], nil)
-                }
-                index += 1
-            }
+        if let streamUrl = streams?.first,
+           !streamUrl.isEmpty {
+            return (streamUrl, nil)
         }
 
         return nil
-    }
-
-    private var moduleTMDBEpisodes: [TMDBEpisode] {
-        moduleEpisodes.enumerated().map { index, episode in
-            let safeEpisodeNumber = episode.number > 0 ? episode.number : (index + 1)
-            return TMDBEpisode(
-                id: abs(episode.href.hashValue),
-                name: episode.title.isEmpty ? "Episode \(safeEpisodeNumber)" : episode.title,
-                overview: nil,
-                stillPath: nil,
-                episodeNumber: safeEpisodeNumber,
-                seasonNumber: 1,
-                airDate: nil,
-                runtime: episode.duration,
-                voteAverage: 0,
-                voteCount: 0
-            )
-        }
-    }
-
-    private func firstURLValue(in source: [String: Any]) -> String? {
-        let candidates = ["url", "stream", "file", "src", "href", "link"]
-        for key in candidates {
-            if let value = source[key] as? String, isURL(value) {
-                return value
-            }
-        }
-        return nil
-    }
-
-    private func isURL(_ value: String) -> Bool {
-        let lowercased = value.lowercased()
-        return lowercased.hasPrefix("http://") || lowercased.hasPrefix("https://")
     }
 
     private func playStreamURL(_ url: String, service: Service, subtitle: String?, headers: [String: String]?) {
