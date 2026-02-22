@@ -413,7 +413,7 @@ final class PlayerViewController: UIViewController {
         case .movie(let id, let title):
             lastPlayedTime = ProgressManager.shared.getMovieCurrentTime(movieId: id, title: title)
             
-        case .episode(let showId, let seasonNumber, let episodeNumber):
+        case .episode(let showId, _, let seasonNumber, let episodeNumber):
             lastPlayedTime = ProgressManager.shared.getEpisodeCurrentTime(showId: showId, seasonNumber: seasonNumber, episodeNumber: episodeNumber)
         }
         
@@ -422,7 +422,7 @@ final class PlayerViewController: UIViewController {
             switch mediaInfo {
             case .movie(let id, let title):
                 progress = ProgressManager.shared.getMovieProgress(movieId: id, title: title)
-            case .episode(let showId, let seasonNumber, let episodeNumber):
+            case .episode(let showId, _, let seasonNumber, let episodeNumber):
                 progress = ProgressManager.shared.getEpisodeProgress(showId: showId, seasonNumber: seasonNumber, episodeNumber: episodeNumber)
             }
             
@@ -1104,8 +1104,8 @@ final class PlayerViewController: UIViewController {
         switch info {
         case .movie(let id, let title):
             ProgressManager.shared.updateMovieProgress(movieId: id, title: title, currentTime: position, totalDuration: duration)
-        case .episode(let showId, let seasonNumber, let episodeNumber):
-            ProgressManager.shared.updateEpisodeProgress(showId: showId, seasonNumber: seasonNumber, episodeNumber: episodeNumber, currentTime: position, totalDuration: duration)
+        case .episode(let showId, let showTitle, let seasonNumber, let episodeNumber):
+            ProgressManager.shared.updateEpisodeProgress(showId: showId, showTitle: showTitle, seasonNumber: seasonNumber, episodeNumber: episodeNumber, currentTime: position, totalDuration: duration)
         }
     }
     

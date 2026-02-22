@@ -39,51 +39,50 @@ struct SettingsView: View {
     ]
     
     var body: some View {
-        #if os(tvOS)
-            HStack(spacing: 0) {
-                VStack(spacing: 30) {
-                    Image("Luna")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 500, height: 500)
-                        .clipShape(RoundedRectangle(cornerRadius: 100, style: .continuous))
-                        .shadow(radius: 10)
-
-                    VStack(spacing: 15) {
-                        Text("Version \(Bundle.main.appVersion) (\(Bundle.main.buildNumber))")
-                            .font(.footnote)
-                            .fontWeight(.regular)
-                            .foregroundColor(.secondary)
-
-                        Text("Copyright © \(String(Calendar.current.component(.year, from: Date()))) Luna by Cranci")
-                            .font(.footnote)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white)
-                    }
+#if os(tvOS)
+        HStack(spacing: 0) {
+            VStack(spacing: 30) {
+                Image("Luna")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 500, height: 500)
+                    .clipShape(RoundedRectangle(cornerRadius: 100, style: .continuous))
+                    .shadow(radius: 10)
+                
+                VStack(spacing: 15) {
+                    Text("Version \(Bundle.main.appVersion) (\(Bundle.main.buildNumber))")
+                        .font(.footnote)
+                        .fontWeight(.regular)
+                        .foregroundColor(.secondary)
+                    
+                    Text("Copyright © \(String(Calendar.current.component(.year, from: Date()))) Luna by cranci")
+                        .font(.footnote)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
                 }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                NavigationStack {
-                    settingsContent
-                        // prevent row clipping
-                        .padding(.horizontal, 20)
-                }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-        #else
-            if #available(iOS 16.0, *) {
-                NavigationStack {
-                    settingsContent
-                }
-            } else {
-                NavigationView {
-                    settingsContent
-                }
-                .navigationViewStyle(StackNavigationViewStyle())
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            
+            NavigationStack {
+                settingsContent
+                    .padding(.horizontal, 20)
             }
-        #endif
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+#else
+        if #available(iOS 16.0, *) {
+            NavigationStack {
+                settingsContent
+            }
+        } else {
+            NavigationView {
+                settingsContent
+            }
+            .navigationViewStyle(StackNavigationViewStyle())
+        }
+#endif
     }
-
+    
     private var settingsContent: some View {
         List {
             Section {
@@ -99,7 +98,7 @@ struct SettingsView: View {
                             .foregroundColor(.secondary)
                     }
                 }
-
+                
                 NavigationLink(destination: TMDBFiltersView()) {
                     Text("Content Filters")
                 }
@@ -133,6 +132,10 @@ struct SettingsView: View {
                     Text("Media Player")
                 }
                 
+                NavigationLink(destination: TrackingSettingsView()) {
+                    Text("Trackers")
+                }
+                
                 NavigationLink(destination: AlternativeUIView()) {
                     Text("Appearance")
                 }
@@ -141,7 +144,7 @@ struct SettingsView: View {
                     Text("Services")
                 }
             }
-
+            
             Section {
                 NavigationLink(destination: StorageView()) {
                     Text("Storage")
@@ -160,16 +163,16 @@ struct SettingsView: View {
                         showKanzen = true
                     }
             }
-            header:{
-                Text("Others")
-            }
+        header:{
+            Text("Others")
         }
-        #if !os(tvOS)
-            .navigationTitle("Settings")
-        #else
-            .listStyle(.grouped)
-            .scrollClipDisabled()
-        #endif
+        }
+#if !os(tvOS)
+        .navigationTitle("Settings")
+#else
+        .listStyle(.grouped)
+        .scrollClipDisabled()
+#endif
     }
 }
 

@@ -1157,7 +1157,7 @@ struct ModulesSearchResultsSheet: View {
                 if isMovie {
                     pvc.mediaInfo = .movie(id: tmdbId, title: mediaTitle)
                 } else if let episode = selectedEpisode {
-                    pvc.mediaInfo = .episode(showId: tmdbId, seasonNumber: episode.seasonNumber, episodeNumber: episode.episodeNumber)
+                    pvc.mediaInfo = .episode(showId: tmdbId, showTitle: mediaTitle, seasonNumber: episode.seasonNumber, episodeNumber: episode.episodeNumber)
                 }
                 pvc.modalPresentationStyle = .fullScreen
                 
@@ -1176,7 +1176,7 @@ struct ModulesSearchResultsSheet: View {
                 if isMovie {
                     playerVC.mediaInfo = .movie(id: tmdbId, title: mediaTitle)
                 } else if let episode = selectedEpisode {
-                    playerVC.mediaInfo = .episode(showId: tmdbId, seasonNumber: episode.seasonNumber, episodeNumber: episode.episodeNumber)
+                    playerVC.mediaInfo = .episode(showId: tmdbId, showTitle: mediaTitle, seasonNumber: episode.seasonNumber, episodeNumber: episode.episodeNumber)
                 }
                 playerVC.modalPresentationStyle = .fullScreen
                 

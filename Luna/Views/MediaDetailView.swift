@@ -720,7 +720,7 @@ struct MediaDetailView: View {
                     if searchResult.isMovie {
                         pvc.mediaInfo = .movie(id: searchResult.id, title: searchResult.displayTitle)
                     } else if let episode = selectedEpisodeForSearch {
-                        pvc.mediaInfo = .episode(showId: searchResult.id, seasonNumber: episode.seasonNumber, episodeNumber: episode.episodeNumber)
+                        pvc.mediaInfo = .episode(showId: searchResult.id, showTitle: searchResult.displayTitle, seasonNumber: episode.seasonNumber, episodeNumber: episode.episodeNumber)
                     }
                 }
                 pvc.modalPresentationStyle = .fullScreen
@@ -740,7 +740,7 @@ struct MediaDetailView: View {
                 if searchResult.isMovie {
                     playerVC.mediaInfo = .movie(id: searchResult.id, title: searchResult.displayTitle)
                 } else if let episode = selectedEpisodeForSearch {
-                    playerVC.mediaInfo = .episode(showId: searchResult.id, seasonNumber: episode.seasonNumber, episodeNumber: episode.episodeNumber)
+                    playerVC.mediaInfo = .episode(showId: searchResult.id, showTitle: searchResult.displayTitle, seasonNumber: episode.seasonNumber, episodeNumber: episode.episodeNumber)
                 }
             }
             playerVC.modalPresentationStyle = .fullScreen

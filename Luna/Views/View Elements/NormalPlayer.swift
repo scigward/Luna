@@ -152,7 +152,7 @@ class NormalPlayer: AVPlayerViewController, AVPlayerViewControllerDelegate {
         case .movie(let id, let title):
             lastPlayedTime = ProgressManager.shared.getMovieCurrentTime(movieId: id, title: title)
             
-        case .episode(let showId, let seasonNumber, let episodeNumber):
+        case .episode(let showId, _, let seasonNumber, let episodeNumber):
             lastPlayedTime = ProgressManager.shared.getEpisodeCurrentTime(showId: showId, seasonNumber: seasonNumber, episodeNumber: episodeNumber)
         }
         
@@ -171,7 +171,7 @@ class NormalPlayer: AVPlayerViewController, AVPlayerViewControllerDelegate {
         case .movie(let id, let title):
             return ProgressManager.shared.getMovieProgress(movieId: id, title: title)
             
-        case .episode(let showId, let seasonNumber, let episodeNumber):
+        case .episode(let showId, _, let seasonNumber, let episodeNumber):
             return ProgressManager.shared.getEpisodeProgress(showId: showId, seasonNumber: seasonNumber, episodeNumber: episodeNumber)
         }
     }

@@ -56,6 +56,7 @@ struct MovieProgressEntry: Codable, Identifiable {
 struct EpisodeProgressEntry: Codable, Identifiable {
     let id: String
     let showId: Int
+    var showTitle: String?
     let seasonNumber: Int
     let episodeNumber: Int
     var currentTime: Double = 0
@@ -160,6 +161,11 @@ final class ProgressManager {
             self.progressData.updateMovie(entry)
         }
         debouncedSave()
+
+        let progress = min(currentTime / totalDuration, 1.0)
+        Task { @MainActor in
+            ProgressSyncManager.shared.pushMovieProgress(tmdbId: movieId, title: title, progress: progress)
+        }
     }
     
     func getMovieProgress(movieId: Int, title: String) -> Double {
@@ -218,7 +224,7 @@ final class ProgressManager {
     
     // MARK: - Episode Progress
     
-    func updateEpisodeProgress(showId: Int, seasonNumber: Int, episodeNumber: Int, currentTime: Double, totalDuration: Double) {
+    func updateEpisodeProgress(showId: Int, showTitle: String? = nil, seasonNumber: Int, episodeNumber: Int, currentTime: Double, totalDuration: Double) {
         guard currentTime >= 0 && totalDuration > 0 && currentTime <= totalDuration else {
             Logger.shared.log("Invalid progress values for episode S\(seasonNumber)E\(episodeNumber): currentTime=\(currentTime), totalDuration=\(totalDuration)", type: "Warning")
             return
@@ -229,6 +235,9 @@ final class ProgressManager {
             var entry = self.progressData.findEpisode(showId: showId, season: seasonNumber, episode: episodeNumber)
             ?? EpisodeProgressEntry(showId: showId, seasonNumber: seasonNumber, episodeNumber: episodeNumber)
             
+            if let showTitle, !showTitle.isEmpty {
+                entry.showTitle = showTitle
+            }
             entry.currentTime = currentTime
             entry.totalDuration = totalDuration
             entry.lastUpdated = Date()
@@ -240,6 +249,17 @@ final class ProgressManager {
             self.progressData.updateEpisode(entry)
         }
         debouncedSave()
+
+        let progress = min(currentTime / totalDuration, 1.0)
+        Task { @MainActor in
+            ProgressSyncManager.shared.pushEpisodeProgress(
+                showId: showId,
+                showTitle: showTitle,
+                seasonNumber: seasonNumber,
+                episodeNumber: episodeNumber,
+                progress: progress
+            )
+        }
     }
     
     func getEpisodeProgress(showId: Int, seasonNumber: Int, episodeNumber: Int) -> Double {
@@ -336,8 +356,8 @@ final class ProgressManager {
             case .movie(let id, let title):
                 self.updateMovieProgress(movieId: id, title: title, currentTime: currentTime, totalDuration: duration)
                 
-            case .episode(let showId, let seasonNumber, let episodeNumber):
-                self.updateEpisodeProgress(showId: showId, seasonNumber: seasonNumber, episodeNumber: episodeNumber, currentTime: currentTime, totalDuration: duration)
+            case .episode(let showId, let showTitle, let seasonNumber, let episodeNumber):
+                self.updateEpisodeProgress(showId: showId, showTitle: showTitle, seasonNumber: seasonNumber, episodeNumber: episodeNumber, currentTime: currentTime, totalDuration: duration)
             }
         }
     }
@@ -347,7 +367,7 @@ final class ProgressManager {
 
 enum MediaInfo {
     case movie(id: Int, title: String)
-    case episode(showId: Int, seasonNumber: Int, episodeNumber: Int)
+    case episode(showId: Int, showTitle: String?, seasonNumber: Int, episodeNumber: Int)
 }
 
 // MARK: - Continue Watching Item
