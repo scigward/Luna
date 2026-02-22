@@ -637,14 +637,14 @@ final class MPVSoftwareRenderer {
             bitsPerComponent: 8,
             bytesPerRow: bytesPerRow,
             space: deviceRGBColorSpace,
-            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
-            | CGBitmapInfo.byteOrder32Little.rawValue
+            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
         ) else {
             Logger.shared.log("Failed to create CGContext for subtitle rendering", type: "Error")
             return
         }
         
         context.saveGState()
+        context.interpolationQuality = .none
         context.setAllowsAntialiasing(false)
         context.setShouldAntialias(false)
         

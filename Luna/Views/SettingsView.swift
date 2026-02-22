@@ -157,17 +157,16 @@ struct SettingsView: View {
                 Text("MICS")
             }
             
-            Section(footer: Text("Luna 1.0.0 - cranci1")) {}
-            
-            Section{
+            Section {
                 Text("Switch to Kanzen")
                     .onTapGesture {
                         showKanzen = true
                     }
+            } header: {
+                Text("Others")
             }
-        header:{
-            Text("Others")
-        }
+            
+            Section(footer: Text("Luna 1.0.0 - cranci1")) {}
         }
 #if !os(tvOS)
         .navigationTitle("Settings")
