@@ -22,12 +22,8 @@ struct SearchView: View {
     @State private var showServiceDownloadAlert = false
     @State private var serviceDownloadError: String?
     @State private var searchHistory: [String] = []
-    @State private var selectedService: Service?
-    @State private var serviceSearchResults: [SearchItem] = []
-    @State private var showSourceSelector = false
     
     @StateObject private var tmdbService = TMDBService.shared
-    @StateObject private var serviceManager = ServiceManager.shared
     @StateObject private var contentFilter = TMDBContentFilter.shared
     @Environment(\.verticalSizeClass) var verticalSizeClass
     
@@ -89,87 +85,21 @@ struct SearchView: View {
         }
     }
     
-    private var serviceSelector: some View {
-        Menu {
-            Button(action: {
-                selectedService = nil
-                serviceSearchResults = []
-                if !searchText.isEmpty {
-                    performSearch()
-                }
-            }) {
-                HStack {
-                    Image(systemName: "tv.fill")
-                        .font(.system(size: 16))
-                    Text("TMDB")
-                    if selectedService == nil {
-                        Spacer()
-                        Image(systemName: "checkmark")
-                    }
-                }
-            }
-            
-            ForEach(serviceManager.services.filter({ $0.isActive })) { service in
-                Button(action: {
-                    selectedService = service
-                    searchResults = []
-                    if !searchText.isEmpty {
-                        performServiceSearch(service: service)
-                    }
-                }) {
-                    HStack(spacing: 8) {
-                        KFImage(URL(string: service.metadata.iconUrl))
-                            .placeholder {
-                                Image(systemName: "app.dashed")
-                                    .foregroundColor(.secondary)
-                            }
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 20, height: 20)
-                            .clipShape(Circle())
-                        
-                        Text(service.metadata.sourceName)
-                        if selectedService?.id == service.id {
-                            Spacer()
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-            }
-        } label: {
-            if let service = selectedService {
-                KFImage(URL(string: service.metadata.iconUrl))
-                    .placeholder {
-                        Image(systemName: "app.dashed")
-                            .foregroundColor(.secondary)
-                    }
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 24, height: 24)
-                    .clipShape(Circle())
-            } else {
-                Image(systemName: "tv.fill")
-                    .font(.system(size: 18))
-            }
-        }
-    }
-    
     private var searchContent: some View {
         ScrollView {
             VStack(spacing: 12) {
                 HStack(spacing: 8) {
                     SearchBarLuna(text: $searchText) {
-                        performSearchOrDownloadService()
+                        performSearch()
                     }
                     .onChangeComp(of: searchText) { _, newValue in
                         if newValue.isEmpty {
                             searchResults = []
-                            serviceSearchResults = []
                             errorMessage = nil
                         }
                     }
                     
-                    if !searchResults.isEmpty && selectedService == nil {
+                    if !searchResults.isEmpty {
                         Menu {
                             ForEach(SearchFilter.allCases, id: \.self) { filter in
                                 Button(action: {
@@ -195,15 +125,7 @@ struct SearchView: View {
             }
             .padding()
             
-            if selectedService != nil && !serviceSearchResults.isEmpty {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 16), count: columnsCount), spacing: 16) {
-                    ForEach(serviceSearchResults) { item in
-                        ServiceSearchResultCard(item: item, service: selectedService!)
-                    }
-                }
-                .padding(.horizontal)
-                .padding(.top)
-            } else if isLoading {
+            if isLoading {
                 VStack {
                     ProgressView()
                         .scaleEffect(1.2)
@@ -233,7 +155,7 @@ struct SearchView: View {
                         .padding(.horizontal)
                     
                     Button("Try Again") {
-                        performSearchOrDownloadService()
+                            performSearch()
                     }
                     .padding(.top)
                 }
@@ -273,7 +195,7 @@ struct SearchView: View {
                             ForEach(Array(searchHistory.enumerated()), id: \.offset) { index, historyItem in
                                 Button(action: {
                                     searchText = historyItem
-                                    performSearchOrDownloadService()
+                                    performSearch()
                                 }) {
                                     HStack {
                                         Image(systemName: "clock")
@@ -362,11 +284,6 @@ struct SearchView: View {
             }
         }
         .navigationTitle("Search")
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                serviceSelector
-            }
-        }
         .alert("Service Downloaded", isPresented: $showServiceDownloadAlert) {
             Button("OK") { }
         } message: {
@@ -434,18 +351,6 @@ struct SearchView: View {
     }
     
     
-    private func performSearchOrDownloadService() {
-        guard !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return
-        }
-        
-        if let service = selectedService {
-            performServiceSearch(service: service)
-        } else {
-            performSearch()
-        }
-    }
-    
     private func performSearch() {
         guard !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return
@@ -473,65 +378,6 @@ struct SearchView: View {
                 }
             }
         }
-    }
-    
-    private func performServiceSearch(service: Service) {
-        guard !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return
-        }
-        
-        isLoading = true
-        errorMessage = nil
-        serviceSearchResults = []
-        
-        let jsController = JSController()
-        jsController.loadScript(service.jsScript)
-        
-        jsController.fetchJsSearchResults(keyword: searchText, module: service) { results in
-            DispatchQueue.main.async {
-                self.serviceSearchResults = results
-                self.isLoading = false
-                if !results.isEmpty {
-                    self.addToSearchHistory(self.searchText)
-                }
-            }
-        }
-    }
-}
-
-struct ServiceSearchResultCard: View {
-    let item: SearchItem
-    let service: Service
-    
-    var body: some View {
-        NavigationLink(destination: MediaDetailView(moduleItem: item, service: service)) {
-            VStack(spacing: 8) {
-                KFImage(URL(string: item.imageUrl))
-                    .placeholder {
-                        Rectangle()
-                            .fill(Color.gray.opacity(0.3))
-                            .overlay(
-                                Image(systemName: "photo")
-                                    .foregroundColor(.gray)
-                            )
-                    }
-                    .resizable()
-                    .aspectRatio(2/3, contentMode: .fill)
-                    .frame(height: 180)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
-                
-                Text(item.title)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .frame(height: 34)
-                    .foregroundColor(.primary)
-            }
-            .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(PlainButtonStyle())
     }
 }
 
