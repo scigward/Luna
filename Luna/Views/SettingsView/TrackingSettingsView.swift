@@ -110,7 +110,7 @@ struct TrackingSettingsView: View {
 
     private var infoSection: some View {
         Section {
-            Text("Trakt receives watch progress updates. AniList updates when an episode/movie reaches completion.\ncranci1 and Luna are not affiliated with AniList nor Trakt, push updates may be incorrect sometimes.")
+            Text("Trakt receives watch progress updates. AniList updates when an episode/movie reaches completion.\n\ncranci1 and Luna are not affiliated with AniList nor Trakt, push updates may be incorrect sometimes.")
                 .font(.footnote)
         } header: {
             Text("How It Works")
@@ -251,6 +251,7 @@ struct TrackingSettingsView: View {
                 .padding(.vertical, 12)
                 .frame(height: 48)
             }
+            .buttonStyle(.borderless)
 #if os(iOS)
             .disabled(isLoading)
 #else

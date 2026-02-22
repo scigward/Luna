@@ -132,12 +132,12 @@ struct SettingsView: View {
                     Text("Media Player")
                 }
                 
-                NavigationLink(destination: TrackingSettingsView()) {
-                    Text("Trackers")
-                }
-                
                 NavigationLink(destination: AlternativeUIView()) {
                     Text("Appearance")
+                }
+                
+                NavigationLink(destination: TrackingSettingsView()) {
+                    Text("Trackers")
                 }
                 
                 NavigationLink(destination: ServicesView()) {
