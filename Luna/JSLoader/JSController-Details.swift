@@ -165,7 +165,7 @@ extension JSController {
                     do {
                         if let array = try JSONSerialization.jsonObject(with: dataEpisodes, options: []) as? [[String: Any]] {
                             episodeLinks = array.compactMap { item in
-                                self.parseEpisodeLink(from: item)
+                                parseEpisodeLink(from: item)
                             }
                         } else {
                             Logger.shared.log("Failed to parse JSON of extractEpisodes", type: "Error")
@@ -267,7 +267,7 @@ extension JSController {
                     do {
                         if let array = try JSONSerialization.jsonObject(with: dataEpisodes, options: []) as? [[String: Any]] {
                             episodeLinks = array.compactMap { item in
-                                self.parseEpisodeLink(from: item)
+                                parseEpisodeLink(from: item)
                             }
                         } else {
                             Logger.shared.log("Failed to parse JSON of extractEpisodes", type: "Error")
