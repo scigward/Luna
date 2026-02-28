@@ -7,6 +7,9 @@
 
 import SwiftUI
 import Kingfisher
+#if os(iOS)
+import UIKit
+#endif
 
 struct ServicesView: View {
     @StateObject private var serviceManager = ServiceManager.shared
@@ -30,7 +33,7 @@ struct ServicesView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     if editMode?.wrappedValue != .active {
                         Button {
-                            showDownloadAlert = true
+                            showAddServiceAlert()
                         } label: {
                             Image(systemName: "plus.app")
                         }
@@ -52,22 +55,6 @@ struct ServicesView: View {
 #endif
             .refreshable {
                 await serviceManager.updateServices()
-            }
-            .alert("Add Service", isPresented: $showDownloadAlert) {
-                TextField("JSON URL", text: $downloadURL)
-                Button("Cancel", role: .cancel) {
-                    downloadURL = ""
-                }
-                Button("Add") {
-                    downloadServiceFromURL()
-                }
-            } message: {
-                Text("Enter the direct JSON file URL")
-            }
-            .alert("Service Downloaded", isPresented: $showServiceDownloadAlert) {
-                Button("OK") { }
-            } message: {
-                Text("The service has been successfully downloaded and saved to your documents folder.")
             }
         }
     }
@@ -106,14 +93,92 @@ struct ServicesView: View {
         }
     }
     
+    private func showAddServiceAlert() {
+#if os(iOS)
+        let pasteboardString = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        
+        if !pasteboardString.isEmpty {
+            presentClipboardAlert(clipboardText: pasteboardString)
+        } else {
+            presentManualURLAlert()
+        }
+#else
+        showDownloadAlert = true
+#endif
+    }
+    
+#if os(iOS)
+    @MainActor
+    private func presentClipboardAlert(clipboardText: String) {
+        let clipboardAlert = UIAlertController(
+            title: "Clipboard Detected",
+            message: "We found some text in your clipboard. Would you like to use it as the service URL?",
+            preferredStyle: .alert
+        )
+        
+        clipboardAlert.addAction(UIAlertAction(title: "Use Clipboard", style: .default, handler: { _ in
+            downloadServiceFromURL(clipboardText)
+        }))
+        
+        clipboardAlert.addAction(UIAlertAction(title: "Enter Manually", style: .default, handler: { _ in
+            presentManualURLAlert()
+        }))
+        
+        topViewController()?.present(clipboardAlert, animated: true)
+    }
+    
+    @MainActor
+    private func presentManualURLAlert() {
+        let alert = UIAlertController(title: "Add Service", message: "Enter the URL of the service JSON file", preferredStyle: .alert)
+        
+        alert.addTextField { textField in
+            textField.placeholder = "https://real.url/service.json"
+            textField.keyboardType = .URL
+            textField.autocapitalizationType = .none
+            textField.autocorrectionType = .no
+            textField.clearButtonMode = .whileEditing
+        }
+        
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Add", style: .default, handler: { _ in
+            let url = alert.textFields?.first?.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !url.isEmpty else { return }
+            downloadServiceFromURL(url)
+        }))
+        
+        topViewController()?.present(alert, animated: true)
+    }
+    
+    @MainActor
+    private func topViewController() -> UIViewController? {
+        guard let windowScene = UIApplication.shared.connectedScenes
+            .first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene,
+              let rootViewController = windowScene.windows.first(where: { $0.isKeyWindow })?.rootViewController else {
+            return nil
+        }
+        
+        var current = rootViewController
+        while let presented = current.presentedViewController {
+            current = presented
+        }
+        return current
+    }
+#endif
+    
     private func downloadServiceFromURL() {
-        guard !downloadURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        downloadServiceFromURL(downloadURL)
+    }
+    
+    private func downloadServiceFromURL(_ urlString: String) {
+        let sanitizedURL = urlString.trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        guard !sanitizedURL.isEmpty else {
             return
         }
         
         Task {
             do {
-                let wasHandled = await serviceManager.handlePotentialServiceURL(downloadURL)
+                let wasHandled = await serviceManager.handlePotentialServiceURL(sanitizedURL)
                 if wasHandled {
                     await MainActor.run {
                         downloadURL = ""
