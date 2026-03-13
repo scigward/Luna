@@ -111,6 +111,11 @@ final class MPVSoftwareRenderer {
         self.primaryRenderView = primaryRenderView
         self.pipDisplayLayer = pipDisplayLayer
         renderQueue.setSpecific(key: renderQueueKey, value: ())
+        if let metalView = primaryRenderView as? MetalVideoView {
+            metalView.onDrawableSizeChanged = { [weak self] size in
+                self?.handleDrawableSizeChanged(size)
+            }
+        }
     }
     
     deinit {
@@ -306,6 +311,22 @@ final class MPVSoftwareRenderer {
         let pointerValue = UInt(bitPattern: Unmanaged.passUnretained(renderTarget).toOpaque())
         let wid = Int64(bitPattern: UInt64(pointerValue))
         setOption(name: "wid", int64Value: wid)
+    }
+    
+    private func handleDrawableSizeChanged(_ size: CGSize) {
+        guard size.width > 0, size.height > 0 else { return }
+        guard let handle = mpv else { return }
+        
+        renderQueue.async { [weak self] in
+            guard let self, self.isRunning, !self.isStopping else { return }
+            
+            self.command(handle, ["set", "video-pan-x", "0"])
+            self.command(handle, ["set", "video-pan-y", "0"])
+            self.command(handle, ["set", "video-zoom", "0"])
+            self.command(handle, ["set", "video-align-x", "0"])
+            self.command(handle, ["set", "video-align-y", "0"])
+            self.command(handle, ["set", "panscan", "0"])
+        }
     }
     
     private func setProperty(name: String, value: String) {
