@@ -16,8 +16,6 @@ protocol MPVSoftwareRendererDelegate: AnyObject {
     func renderer(_ renderer: MPVSoftwareRenderer, didChangePause isPaused: Bool)
     func renderer(_ renderer: MPVSoftwareRenderer, didChangeLoading isLoading: Bool)
     func renderer(_ renderer: MPVSoftwareRenderer, didBecomeReadyToSeek: Bool)
-    func renderer(_ renderer: MPVSoftwareRenderer, getSubtitleForTime time: Double) -> NSAttributedString?
-    func renderer(_ renderer: MPVSoftwareRenderer, getSubtitleStyle: Void) -> SubtitleStyle
 }
 
 struct SubtitleStyle {
@@ -36,21 +34,6 @@ struct SubtitleStyle {
     )
 }
 
-private struct SubtitleRenderKey: Hashable {
-    let text: String
-    let fontSize: CGFloat
-    let foreground: String
-    let stroke: String
-    let strokeWidth: CGFloat
-}
-
-private struct SubtitleRenderCache {
-    let key: SubtitleRenderKey
-    let image: CGImage
-    let size: CGSize
-    let createdAt: Date
-}
-
 final class MPVSoftwareRenderer {
     enum RendererError: Error {
         case mpvCreationFailed
@@ -62,7 +45,6 @@ final class MPVSoftwareRenderer {
     private let renderQueue = DispatchQueue(label: "mpv.software.render", qos: .userInitiated)
     private let eventQueue = DispatchQueue(label: "mpv.software.events", qos: .utility)
     private let stateQueue = DispatchQueue(label: "mpv.software.state", attributes: .concurrent)
-    private let subtitlePrerenderQueue = DispatchQueue(label: "com.app.subtitle.prerender", qos: .utility)
     private let eventQueueGroup = DispatchGroup()
     private let renderQueueKey = DispatchSpecificKey<Void>()
     
@@ -94,7 +76,6 @@ final class MPVSoftwareRenderer {
     
     weak var delegate: MPVSoftwareRendererDelegate?
     
-    private let maxCacheSize = 4
     private var isPaused: Bool = true
     private var isLoading: Bool = false
     private var isRenderScheduled = false
@@ -104,14 +85,6 @@ final class MPVSoftwareRenderer {
     private var minRenderInterval: CFTimeInterval
     private var lastRenderTime: CFTimeInterval = 0
     private var lastRenderDimensions: CGSize = .zero
-    private let subtitleUpdateInterval: Double = 0.5
-    private var lastSubtitleCheckTime: Double = -1.0
-    private var cachedSubtitleText: NSAttributedString?
-    
-    private var cacheInsertionOrder: [SubtitleRenderKey] = []
-    
-    private let deviceRGBColorSpace = CGColorSpaceCreateDeviceRGB()
-    private var subtitleRenderCache: [SubtitleRenderKey: SubtitleRenderCache] = [:]
     
     var isPausedState: Bool {
         return isPaused
@@ -162,6 +135,8 @@ final class MPVSoftwareRenderer {
         setOption(name: "demuxer-readahead-secs", value: "10")
         setOption(name: "video-sync", value: "display-resample")
         setOption(name: "audio-normalize-downmix", value: "yes")
+        setOption(name: "sub-ass", value: "yes")
+        setOption(name: "sub-ass-override", value: "yes")
         
         let initStatus = mpv_initialize(handle)
         guard initStatus >= 0 else {
@@ -535,28 +510,6 @@ final class MPVSoftwareRenderer {
         
         CVPixelBufferUnlockBaseAddress(buffer, [])
         
-        if let style = delegate?.renderer(self, getSubtitleStyle: ()), style.isVisible {
-            let currentTime = cachedPosition
-            let timeDelta = abs(currentTime - lastSubtitleCheckTime)
-            
-            if timeDelta >= subtitleUpdateInterval {
-                lastSubtitleCheckTime = currentTime
-                cachedSubtitleText = delegate?.renderer(self, getSubtitleForTime: currentTime)
-            }
-            
-            if let attributedText = cachedSubtitleText, attributedText.length > 0 {
-                burnSubtitles(into: buffer, attributedText: attributedText, style: style)
-            } else {
-                subtitleRenderCache.removeAll()
-                cacheInsertionOrder.removeAll()
-            }
-        } else {
-            subtitleRenderCache.removeAll()
-            cacheInsertionOrder.removeAll()
-            lastSubtitleCheckTime = -1.0
-            cachedSubtitleText = nil
-        }
-        
         enqueue(buffer: buffer)
         
         if preAllocatedBuffers.count < 2 {
@@ -590,223 +543,6 @@ final class MPVSoftwareRenderer {
         let targetWidth = max(1, Int(videoSize.width / ratio))
         let targetHeight = max(1, Int(videoSize.height / ratio))
         return CGSize(width: CGFloat(targetWidth), height: CGFloat(targetHeight))
-    }
-    
-    func prerenderSubtitle(attributedText: NSAttributedString, style: SubtitleStyle, maxWidth: CGFloat) {
-        subtitlePrerenderQueue.async { [weak self] in
-            guard let self else { return }
-            _ = self.makeSubtitleImage(from: attributedText, style: style, maxWidth: maxWidth)
-        }
-    }
-    
-    private func burnSubtitles(into pixelBuffer: CVPixelBuffer, attributedText: NSAttributedString, style: SubtitleStyle) {
-        let bufferWidth = CVPixelBufferGetWidth(pixelBuffer)
-        let bufferHeight = CVPixelBufferGetHeight(pixelBuffer)
-        
-        guard bufferWidth > 0, bufferHeight > 0 else {
-            Logger.shared.log(
-                "Invalid buffer dimensions for subtitle: \(bufferWidth)x\(bufferHeight)",
-                type: "Error"
-            )
-            return
-        }
-        
-        let highRes = bufferWidth >= 3840 || bufferHeight >= 2160
-        let renderScale: CGFloat = highRes ? 0.5 : 1.0
-        let effectiveWidth = Int(CGFloat(bufferWidth) * renderScale)
-        let effectiveHeight = Int(CGFloat(bufferHeight) * renderScale)
-        
-        guard let subtitleImage = makeSubtitleImage(
-            from: attributedText,
-            style: style,
-            maxWidth: CGFloat(effectiveWidth) * 0.9
-        ) else { return }
-        
-        CVPixelBufferLockBaseAddress(pixelBuffer, [])
-        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, []) }
-        
-        guard let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) else {
-            Logger.shared.log("Failed to get base address for subtitle rendering", type: "Error")
-            return
-        }
-        
-        let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
-        
-        guard let context = CGContext(
-            data: baseAddress,
-            width: bufferWidth,
-            height: bufferHeight,
-            bitsPerComponent: 8,
-            bytesPerRow: bytesPerRow,
-            space: deviceRGBColorSpace,
-            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
-        ) else {
-            Logger.shared.log("Failed to create CGContext for subtitle rendering", type: "Error")
-            return
-        }
-        
-        context.saveGState()
-        context.interpolationQuality = .none
-        context.setAllowsAntialiasing(false)
-        context.setShouldAntialias(false)
-        
-        let imageSize = subtitleImage.size
-        let bottomMargin = max(
-            CGFloat(effectiveHeight) * 0.08,
-            (style.fontSize + 25) * 1.4
-        )
-        let horizontalMargin = max(
-            CGFloat(effectiveWidth) * 0.02,
-            (style.fontSize + 25) * 0.8
-        )
-        let availableWidth = max(CGFloat(effectiveWidth) - horizontalMargin * 2.0, 1.0)
-        let scale = min(1.0, availableWidth / imageSize.width)
-        
-        let renderWidth = imageSize.width * scale
-        let renderHeight = imageSize.height * scale
-        
-        var xPosition = (CGFloat(effectiveWidth) - renderWidth) / 2.0
-        xPosition = max(xPosition, horizontalMargin)
-        if xPosition + renderWidth > CGFloat(effectiveWidth) - horizontalMargin {
-            xPosition = max(horizontalMargin, CGFloat(effectiveWidth) - horizontalMargin - renderWidth)
-        }
-        
-        let topLimit = CGFloat(effectiveHeight) - renderHeight - bottomMargin
-        var yPosition = bottomMargin
-        if topLimit < bottomMargin {
-            yPosition = max(topLimit, 0)
-        }
-        
-        let renderRect = CGRect(x: xPosition, y: yPosition, width: renderWidth, height: renderHeight)
-        context.draw(subtitleImage.image, in: renderRect)
-        context.restoreGState()
-    }
-    
-    private func makeSubtitleImage(from attributedText: NSAttributedString, style: SubtitleStyle, maxWidth: CGFloat) -> (image: CGImage, size: CGSize)? {
-        guard maxWidth > 0, attributedText.length > 0 else { return nil }
-        
-        let key = SubtitleRenderKey(
-            text: attributedText.string,
-            fontSize: style.fontSize + 25,
-            foreground: colorKey(style.foregroundColor),
-            stroke: colorKey(style.strokeColor),
-            strokeWidth: style.strokeWidth
-        )
-        
-        if let cached = subtitleRenderCache[key] {
-            return (cached.image, cached.size)
-        }
-        
-        return autoreleasepool {
-            let mutable = NSMutableAttributedString(attributedString: attributedText)
-            let fullRange = NSRange(location: 0, length: mutable.length)
-            let fontSize = style.fontSize + 25
-            
-            mutable.enumerateAttribute(.font, in: fullRange, options: []) { value, range, _ in
-                let newFont: UIFont
-                if let font = value as? UIFont {
-                    newFont = UIFont(descriptor: font.fontDescriptor, size: fontSize)
-                } else {
-                    newFont = UIFont.systemFont(ofSize: fontSize, weight: .semibold)
-                }
-                mutable.addAttribute(.font, value: newFont, range: range)
-            }
-            
-            mutable.addAttribute(.foregroundColor, value: style.foregroundColor, range: fullRange)
-            
-            if style.strokeWidth > 0 && style.strokeColor.cgColor.alpha > 0 {
-                mutable.addAttribute(.strokeColor, value: style.strokeColor, range: fullRange)
-                mutable.addAttribute(.strokeWidth, value: -style.strokeWidth * 2.0, range: fullRange)
-            } else {
-                mutable.removeAttribute(.strokeColor, range: fullRange)
-                mutable.removeAttribute(.strokeWidth, range: fullRange)
-            }
-            
-            let paragraphStyle = NSMutableParagraphStyle()
-            paragraphStyle.alignment = .center
-            paragraphStyle.lineBreakMode = .byWordWrapping
-            paragraphStyle.lineHeightMultiple = 1.05
-            mutable.addAttribute(.paragraphStyle, value: paragraphStyle, range: fullRange)
-            
-            let constraint = CGSize(width: maxWidth, height: .greatestFiniteMagnitude)
-            var boundingRect = mutable.boundingRect(
-                with: constraint,
-                options: [.usesLineFragmentOrigin, .usesFontLeading],
-                context: nil
-            )
-            boundingRect.origin = .zero
-            boundingRect.size.width = ceil(boundingRect.width)
-            boundingRect.size.height = ceil(boundingRect.height)
-            
-            guard boundingRect.width > 0, boundingRect.height > 0 else { return nil }
-            
-            let strokeRadius = max(style.strokeWidth, 0)
-            let padding = strokeRadius > 0 ? strokeRadius * 2.0 : 2.0
-            let paddedSize = CGSize(
-                width: boundingRect.width + padding * 2.0,
-                height: boundingRect.height + padding * 2.0
-            )
-            let textRect = CGRect(origin: CGPoint(x: padding, y: padding), size: boundingRect.size)
-            
-            UIGraphicsBeginImageContextWithOptions(paddedSize, false, 0)
-            defer { UIGraphicsEndImageContext() }
-            
-            if strokeRadius > 0, let ctx = UIGraphicsGetCurrentContext() {
-                ctx.saveGState()
-                
-                let strokeOnlyText = NSMutableAttributedString(attributedString: mutable)
-                strokeOnlyText.addAttribute(.foregroundColor, value: style.strokeColor, range: fullRange)
-                strokeOnlyText.removeAttribute(.strokeColor, range: fullRange)
-                strokeOnlyText.removeAttribute(.strokeWidth, range: fullRange)
-                
-                ctx.setShadow(
-                    offset: .zero,
-                    blur: strokeRadius * 1.5,
-                    color: style.strokeColor.cgColor
-                )
-                strokeOnlyText.draw(
-                    with: textRect,
-                    options: [.usesLineFragmentOrigin, .usesFontLeading],
-                    context: nil
-                )
-                ctx.setShadow(offset: .zero, blur: 0, color: nil)
-                ctx.restoreGState()
-            }
-            
-            mutable.draw(with: textRect, options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil)
-            
-            guard let image = UIGraphicsGetImageFromCurrentImageContext()?.cgImage else {
-                Logger.shared.log("Failed to create CGImage for subtitles", type: "Error")
-                return nil
-            }
-            
-            insertIntoCache(key: key, image: image, size: paddedSize)
-            return (image, paddedSize)
-        }
-    }
-    
-    private func insertIntoCache(key: SubtitleRenderKey, image: CGImage, size: CGSize) {
-        if subtitleRenderCache[key] != nil {
-            cacheInsertionOrder.removeAll { $0 == key }
-        } else if subtitleRenderCache.count >= maxCacheSize, let oldest = cacheInsertionOrder.first {
-            subtitleRenderCache.removeValue(forKey: oldest)
-            cacheInsertionOrder.removeFirst()
-        }
-        subtitleRenderCache[key] = SubtitleRenderCache(key: key, image: image, size: size, createdAt: Date())
-        cacheInsertionOrder.append(key)
-    }
-    
-    private func colorKey(_ color: UIColor) -> String {
-        let cgColor = color.cgColor
-        let converted = cgColor.converted(to: deviceRGBColorSpace, intent: .defaultIntent, options: nil) ?? cgColor
-        guard let components = converted.components else { return "unknown" }
-        
-        let r = components.count > 0 ? components[0] : 0
-        let g = components.count > 1 ? components[1] : r
-        let b = components.count > 2 ? components[2] : r
-        let a = components.count > 3 ? components[3] : cgColor.alpha
-        
-        return String(format: "%.4f-%.4f-%.4f-%.4f", r, g, b, a)
     }
     
     private func createPixelBufferPool(width: Int, height: Int) {
@@ -1263,5 +999,44 @@ final class MPVSoftwareRenderer {
         var speed: Double = 1.0
         getProperty(handle: handle, name: "speed", format: MPV_FORMAT_DOUBLE, value: &speed)
         return speed
+    }
+    
+    func setSubtitleVisible(_ visible: Bool) {
+        setProperty(name: "sub-visibility", value: visible ? "yes" : "no")
+    }
+    
+    func addSubtitleTrack(urlString: String) {
+        guard let handle = mpv, !urlString.isEmpty else { return }
+        renderQueue.async { [weak self] in
+            guard let self else { return }
+            self.command(handle, ["sub-add", urlString, "select"])
+            Logger.shared.log("sub-add: \(urlString)", type: "Info")
+        }
+    }
+
+    func clearCurrentSubtitleTrack() {
+        guard let handle = mpv else { return }
+        renderQueue.async { [weak self] in
+            guard let self else { return }
+            self.command(handle, ["sub-remove"])
+        }
+    }
+    
+    func applySubtitleStyle(_ style: SubtitleStyle) {
+        setProperty(name: "sub-font-size", value: String(format: "%.2f", style.fontSize))
+        setProperty(name: "sub-color", value: style.foregroundColor.mpvColorString)
+        setProperty(name: "sub-border-color", value: style.strokeColor.mpvColorString)
+        setProperty(name: "sub-border-size", value: String(format: "%.2f", max(style.strokeWidth, 0)))
+    }
+}
+
+private extension UIColor {
+    var mpvColorString: String {
+        var r: CGFloat = 0
+        var g: CGFloat = 0
+        var b: CGFloat = 0
+        var a: CGFloat = 0
+        getRed(&r, green: &g, blue: &b, alpha: &a)
+        return String(format: "%.3f/%.3f/%.3f/%.3f", r, g, b, a)
     }
 }

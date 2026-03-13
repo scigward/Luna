@@ -225,7 +225,7 @@ final class PlayerViewController: UIViewController {
     
     private var subtitleURLs: [String] = []
     private var currentSubtitleIndex: Int = 0
-    private var subtitleEntries: [SubtitleEntry] = []
+    private var pendingSubtitleURLs: [String]?
     
     class SubtitleModel: ObservableObject {
         @Published var currentAttributedText: NSAttributedString = NSAttributedString()
@@ -421,7 +421,7 @@ final class PlayerViewController: UIViewController {
         }
         
         if let subs = initialSubtitles, !subs.isEmpty {
-            loadSubtitles(subs)
+            pendingSubtitleURLs = subs
         }
     }
     
@@ -644,6 +644,7 @@ final class PlayerViewController: UIViewController {
             state: subtitleModel.isVisible ? .off : .on
         ) { [weak self] _ in
             self?.subtitleModel.isVisible = false
+            self?.renderer.setSubtitleVisible(false)
             self?.updateSubtitleButtonAppearance()
             self?.updateSubtitleMenu()
         }
@@ -659,6 +660,7 @@ final class PlayerViewController: UIViewController {
                 self?.currentSubtitleIndex = index
                 self?.subtitleModel.isVisible = true
                 self?.loadCurrentSubtitle()
+                self?.renderer.setSubtitleVisible(true)
                 self?.updateSubtitleButtonAppearance()
                 self?.updateSubtitleMenu()
             }
@@ -767,9 +769,8 @@ final class PlayerViewController: UIViewController {
     }
     
     private func updateCurrentSubtitleAppearance() {
-        if subtitleModel.isVisible && currentSubtitleIndex < subtitleURLs.count {
-            loadCurrentSubtitle()
-        }
+        renderer.applySubtitleStyle(currentSubtitleStyle())
+        renderer.setSubtitleVisible(subtitleModel.isVisible)
     }
     
     private func updateSubtitleButtonAppearance() {
@@ -786,6 +787,8 @@ final class PlayerViewController: UIViewController {
             subtitleButton.isHidden = false
             currentSubtitleIndex = 0
             subtitleModel.isVisible = true
+            renderer.applySubtitleStyle(currentSubtitleStyle())
+            renderer.setSubtitleVisible(true)
             loadCurrentSubtitle()
             updateSubtitleButtonAppearance()
             updateSubtitleMenu()
@@ -795,32 +798,26 @@ final class PlayerViewController: UIViewController {
     private func loadCurrentSubtitle() {
         guard currentSubtitleIndex < subtitleURLs.count else { return }
         let urlString = subtitleURLs[currentSubtitleIndex]
-        
-        guard let url = URL(string: urlString) else {
+        guard URL(string: urlString) != nil else {
             Logger.shared.log("Invalid subtitle URL: \(urlString)", type: "Error")
             return
         }
-        
-        URLSession.custom.dataTask(with: url) { [weak self] data, response, error in
-            guard let self = self else { return }
-            
-            if let error = error {
-                Logger.shared.log("Failed to download subtitles: \(error.localizedDescription)", type: "Error")
-                return
-            }
-            
-            guard let data = data, let subtitleContent = String(data: data, encoding: .utf8) else {
-                Logger.shared.log("Failed to parse subtitle data", type: "Error")
-                return
-            }
-            
-            self.parseAndDisplaySubtitles(subtitleContent)
-        }.resume()
+
+        renderer.applySubtitleStyle(currentSubtitleStyle())
+        renderer.clearCurrentSubtitleTrack()
+        renderer.addSubtitleTrack(urlString: urlString)
+        renderer.setSubtitleVisible(subtitleModel.isVisible)
+        Logger.shared.log("Loading subtitle track through mpv/libass: \(urlString)", type: "Info")
     }
-    
-    private func parseAndDisplaySubtitles(_ content: String) {
-        subtitleEntries = SubtitleLoader.parseSubtitles(from: content, fontSize: subtitleModel.fontSize, foregroundColor: subtitleModel.foregroundColor)
-        Logger.shared.log("Loaded \(subtitleEntries.count) subtitle entries", type: "Info")
+
+    private func currentSubtitleStyle() -> SubtitleStyle {
+        SubtitleStyle(
+            foregroundColor: subtitleModel.foregroundColor,
+            strokeColor: subtitleModel.strokeColor,
+            strokeWidth: subtitleModel.strokeWidth,
+            fontSize: subtitleModel.fontSize,
+            isVisible: subtitleModel.isVisible
+        )
     }
     
     @objc private func subtitleButtonTapped() {
@@ -841,6 +838,7 @@ final class PlayerViewController: UIViewController {
         
         let disableAction = UIAlertAction(title: "Disable Subtitles", style: .default) { [weak self] _ in
             self?.subtitleModel.isVisible = false
+            self?.renderer.setSubtitleVisible(false)
             self?.updateSubtitleButtonAppearance()
         }
         alert.addAction(disableAction)
@@ -850,6 +848,7 @@ final class PlayerViewController: UIViewController {
                 self?.currentSubtitleIndex = index
                 self?.subtitleModel.isVisible = true
                 self?.loadCurrentSubtitle()
+                self?.renderer.setSubtitleVisible(true)
                 self?.updateSubtitleButtonAppearance()
             }
             alert.addAction(action)
@@ -1258,31 +1257,13 @@ extension PlayerViewController: MPVSoftwareRendererDelegate {
                 Logger.shared.log("Resumed MPV playback from \(Int(seekTime))s", type: "Progress")
                 self.pendingSeekTime = nil
             }
+            if let subs = self.pendingSubtitleURLs {
+                self.pendingSubtitleURLs = nil
+                self.loadSubtitles(subs)
+            }
         }
     }
     
-    func renderer(_ renderer: MPVSoftwareRenderer, getSubtitleForTime time: Double) -> NSAttributedString? {
-        guard subtitleModel.isVisible, !subtitleEntries.isEmpty else {
-            return nil
-        }
-        
-        if let entry = subtitleEntries.first(where: { $0.startTime <= time && time <= $0.endTime }) {
-            return entry.attributedText
-        }
-        
-        return nil
-    }
-    
-    func renderer(_ renderer: MPVSoftwareRenderer, getSubtitleStyle: Void) -> SubtitleStyle {
-        let style = SubtitleStyle(
-            foregroundColor: subtitleModel.foregroundColor,
-            strokeColor: subtitleModel.strokeColor,
-            strokeWidth: subtitleModel.strokeWidth,
-            fontSize: subtitleModel.fontSize,
-            isVisible: subtitleModel.isVisible
-        )
-        return style
-    }
 }
 
 // MARK: - PiP Support
