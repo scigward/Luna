@@ -82,7 +82,6 @@ final class MPVSoftwareRenderer {
     
     private var isPaused: Bool = true
     private var isLoading: Bool = false
-    private var isReadyToSeek: Bool = false
     private var cachedDuration: Double = 0
     private var cachedPosition: Double = 0
     
@@ -131,7 +130,6 @@ final class MPVSoftwareRenderer {
         setOption(name: "gpu-context", value: "moltenvk")
         
         setOption(name: "idle", value: "yes")
-        setOption(name: "cache", value: "yes")
         setOption(name: "ytdl", value: "yes")
         setOption(name: "sub-ass", value: "yes")
         setOption(name: "hr-seek", value: "yes")
@@ -142,8 +140,6 @@ final class MPVSoftwareRenderer {
         setOption(name: "msg-level", value: "all=warn")
         setOption(name: "demuxer-thread", value: "yes")
         setOption(name: "sub-ass-override", value: "yes")
-        setOption(name: "demuxer-max-bytes", value: "150M")
-        setOption(name: "demuxer-readahead-secs", value: "10")
         setOption(name: "video-sync", value: "display-resample")
         setOption(name: "audio-normalize-downmix", value: "yes")
         configureWindowEmbedding()
@@ -250,7 +246,6 @@ final class MPVSoftwareRenderer {
         renderQueue.async { [weak self] in
             guard let self else { return }
             self.isLoading = true
-            self.isReadyToSeek = false
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 self.delegate?.renderer(self, didChangeLoading: true)
@@ -268,11 +263,6 @@ final class MPVSoftwareRenderer {
             let target = url.isFileURL ? url.path : url.absoluteString
             self.command(handle, ["loadfile", target, "replace"])
         }
-    }
-    
-    func reloadCurrentItem() {
-        guard let url = currentURL, let preset = currentPreset else { return }
-        load(url: url, with: preset, headers: currentHeaders)
     }
     
     func applyPreset(_ preset: PlayerPreset) {
@@ -311,7 +301,7 @@ final class MPVSoftwareRenderer {
             Logger.shared.log("Primary render view is missing, mpv window embedding disabled", type: "Warn")
             return
         }
-
+        
         let renderTarget = primaryRenderView.layer
         let pointerValue = UInt(bitPattern: Unmanaged.passUnretained(renderTarget).toOpaque())
         let wid = Int64(bitPattern: UInt64(pointerValue))
@@ -909,7 +899,6 @@ final class MPVSoftwareRenderer {
             refreshVideoState()
         case MPV_EVENT_FILE_LOADED:
             isLoading = false
-            isReadyToSeek = true
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 self.delegate?.renderer(self, didChangeLoading: false)
@@ -1018,10 +1007,6 @@ final class MPVSoftwareRenderer {
     
     func pausePlayback() {
         setProperty(name: "pause", value: "yes")
-    }
-    
-    func togglePause() {
-        if isPaused { play() } else { pausePlayback() }
     }
     
     func seek(to seconds: Double) {

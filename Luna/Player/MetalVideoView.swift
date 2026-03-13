@@ -15,6 +15,9 @@ final class MetalVideoView: UIView {
         return layer as! CAMetalLayer
     }
     
+    var onDrawableSizeChanged: ((CGSize) -> Void)?
+    private var lastDrawableSize: CGSize = .zero
+    
     override init(frame: CGRect) {
         super.init(frame: frame)
         commonInit()
@@ -28,8 +31,41 @@ final class MetalVideoView: UIView {
     private func commonInit() {
         backgroundColor = .black
         isOpaque = true
+        contentScaleFactor = UIScreen.main.scale
+        
         metalLayer.isOpaque = true
-        metalLayer.framebufferOnly = false
-        metalLayer.contentsScale = UIScreen.main.scale
+        metalLayer.pixelFormat = .bgra8Unorm
+        metalLayer.presentsWithTransaction = false
+        metalLayer.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
+        metalLayer.framebufferOnly = true
+        
+        updateMetalLayerLayout(notify: false)
+    }
+    
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        updateMetalLayerLayout(notify: true)
+    }
+    
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        updateMetalLayerLayout(notify: true)
+    }
+    
+    private func updateMetalLayerLayout(notify: Bool) {
+        let scale = window?.screen.scale ?? UIScreen.main.scale
+        let drawableSize = CGSize(width: bounds.width * scale, height: bounds.height * scale)
+        
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        metalLayer.contentsScale = scale
+        metalLayer.frame = bounds
+        metalLayer.drawableSize = drawableSize
+        CATransaction.commit()
+        
+        if notify, drawableSize != lastDrawableSize {
+            lastDrawableSize = drawableSize
+            onDrawableSizeChanged?(drawableSize)
+        }
     }
 }

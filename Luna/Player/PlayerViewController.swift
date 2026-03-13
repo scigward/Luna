@@ -17,7 +17,7 @@ final class PlayerViewController: UIViewController {
         v.clipsToBounds = true
         return v
     }()
-
+    
     private let primaryRenderView: MetalVideoView = {
         let v = MetalVideoView()
         v.translatesAutoresizingMaskIntoConstraints = false
@@ -389,6 +389,10 @@ final class PlayerViewController: UIViewController {
         
         CATransaction.begin()
         CATransaction.setDisableActions(true)
+        
+        primaryRenderView.frame = videoContainer.bounds
+        primaryRenderView.layoutIfNeeded()
+        
         displayLayer.frame = CGRect(x: 0, y: 0, width: 1, height: 1)
         displayLayer.isHidden = true
         displayLayer.opacity = 0.0
@@ -398,6 +402,14 @@ final class PlayerViewController: UIViewController {
         }
         
         CATransaction.commit()
+    }
+    
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+        coordinator.animate(alongsideTransition: { [weak self] _ in
+            self?.videoContainer.layoutIfNeeded()
+            self?.primaryRenderView.layoutIfNeeded()
+        })
     }
     
     deinit {
@@ -502,7 +514,7 @@ final class PlayerViewController: UIViewController {
             videoContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             videoContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             videoContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-
+            
             primaryRenderView.topAnchor.constraint(equalTo: videoContainer.topAnchor),
             primaryRenderView.leadingAnchor.constraint(equalTo: videoContainer.leadingAnchor),
             primaryRenderView.trailingAnchor.constraint(equalTo: videoContainer.trailingAnchor),
@@ -817,14 +829,14 @@ final class PlayerViewController: UIViewController {
             Logger.shared.log("Invalid subtitle URL: \(urlString)", type: "Error")
             return
         }
-
+        
         renderer.applySubtitleStyle(currentSubtitleStyle())
         renderer.clearCurrentSubtitleTrack()
         renderer.addSubtitleTrack(urlString: urlString)
         renderer.setSubtitleVisible(subtitleModel.isVisible)
         Logger.shared.log("Loading subtitle track through mpv/libass: \(urlString)", type: "Info")
     }
-
+    
     private func currentSubtitleStyle() -> SubtitleStyle {
         SubtitleStyle(
             foregroundColor: subtitleModel.foregroundColor,
