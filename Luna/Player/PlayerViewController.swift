@@ -390,6 +390,7 @@ final class PlayerViewController: UIViewController {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         
+        primaryRenderView.frame = videoContainer.bounds
         primaryRenderView.layoutIfNeeded()
         
         displayLayer.frame = CGRect(x: 0, y: 0, width: 1, height: 1)
