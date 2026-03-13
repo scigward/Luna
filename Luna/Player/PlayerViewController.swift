@@ -17,6 +17,12 @@ final class PlayerViewController: UIViewController {
         v.clipsToBounds = true
         return v
     }()
+
+    private let primaryRenderView: MetalVideoView = {
+        let v = MetalVideoView()
+        v.translatesAutoresizingMaskIntoConstraints = false
+        return v
+    }()
     
     private let displayLayer = AVSampleBufferDisplayLayer()
     
@@ -209,7 +215,7 @@ final class PlayerViewController: UIViewController {
     private var progressModel = ProgressModel()
     
     private lazy var renderer: MPVSoftwareRenderer = {
-        let r = MPVSoftwareRenderer(displayLayer: displayLayer)
+        let r = MPVSoftwareRenderer(primaryRenderView: primaryRenderView, pipDisplayLayer: displayLayer)
         r.delegate = self
         return r
     }()
@@ -383,9 +389,9 @@ final class PlayerViewController: UIViewController {
         
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        displayLayer.frame = videoContainer.bounds
-        displayLayer.isHidden = false
-        displayLayer.opacity = 1.0
+        displayLayer.frame = CGRect(x: 0, y: 0, width: 1, height: 1)
+        displayLayer.isHidden = true
+        displayLayer.opacity = 0.0
         
         if let gradientLayer = controlsOverlayView.layer.sublayers?.first(where: { $0.name == "gradientLayer" }) {
             gradientLayer.frame = controlsOverlayView.bounds
@@ -400,6 +406,7 @@ final class PlayerViewController: UIViewController {
             pipController?.stopPictureInPicture()
         }
         pipController?.invalidate()
+        renderer.stopPiPRendering()
         renderer.stop()
         displayLayer.removeFromSuperlayer()
         NotificationCenter.default.removeObserver(self)
@@ -453,8 +460,9 @@ final class PlayerViewController: UIViewController {
     
     private func setupLayout() {
         view.addSubview(videoContainer)
+        videoContainer.addSubview(primaryRenderView)
         
-        displayLayer.frame = videoContainer.bounds
+        displayLayer.frame = CGRect(x: 0, y: 0, width: 1, height: 1)
         displayLayer.videoGravity = .resizeAspect
 #if compiler(>=6.0)
         if #available(iOS 26.0, tvOS 26.0, *) {
@@ -472,6 +480,8 @@ final class PlayerViewController: UIViewController {
         }
 #endif
         displayLayer.backgroundColor = UIColor.black.cgColor
+        displayLayer.opacity = 0.0
+        displayLayer.isHidden = true
         
         videoContainer.layer.addSublayer(displayLayer)
         videoContainer.addSubview(controlsOverlayView)
@@ -492,6 +502,11 @@ final class PlayerViewController: UIViewController {
             videoContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             videoContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             videoContainer.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
+            primaryRenderView.topAnchor.constraint(equalTo: videoContainer.topAnchor),
+            primaryRenderView.leadingAnchor.constraint(equalTo: videoContainer.leadingAnchor),
+            primaryRenderView.trailingAnchor.constraint(equalTo: videoContainer.trailingAnchor),
+            primaryRenderView.bottomAnchor.constraint(equalTo: videoContainer.bottomAnchor),
             
             progressContainer.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 12),
             progressContainer.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -12),
@@ -1269,13 +1284,19 @@ extension PlayerViewController: MPVSoftwareRendererDelegate {
 // MARK: - PiP Support
 extension PlayerViewController: PiPControllerDelegate {
     func pipController(_ controller: PiPController, willStartPictureInPicture: Bool) {
+        renderer.startPiPRendering()
         pipController?.updatePlaybackState()
     }
     func pipController(_ controller: PiPController, didStartPictureInPicture: Bool) {
+        if !didStartPictureInPicture {
+            renderer.stopPiPRendering()
+        }
         pipController?.updatePlaybackState()
     }
     func pipController(_ controller: PiPController, willStopPictureInPicture: Bool) { }
-    func pipController(_ controller: PiPController, didStopPictureInPicture: Bool) { }
+    func pipController(_ controller: PiPController, didStopPictureInPicture: Bool) {
+        renderer.stopPiPRendering()
+    }
     func pipController(_ controller: PiPController, restoreUserInterfaceForPictureInPictureStop completionHandler: @escaping (Bool) -> Void) {
         if presentedViewController != nil {
             dismiss(animated: true) { completionHandler(true) }
