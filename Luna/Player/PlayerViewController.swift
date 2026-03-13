@@ -177,6 +177,21 @@ final class PlayerViewController: UIViewController {
         return b
     }()
     
+    private let skipSegmentButton: UIButton = {
+        let b = UIButton(type: .system)
+        b.translatesAutoresizingMaskIntoConstraints = false
+        b.setTitle("Skip", for: .normal)
+        b.setTitleColor(.white, for: .normal)
+        b.titleLabel?.font = .systemFont(ofSize: 14, weight: .semibold)
+        b.backgroundColor = UIColor(white: 0.2, alpha: 0.55)
+        b.layer.cornerRadius = 18
+        b.layer.cornerCurve = .continuous
+        b.contentEdgeInsets = UIEdgeInsets(top: 8, left: 12, bottom: 8, right: 12)
+        b.alpha = 0.0
+        b.isHidden = true
+        return b
+    }()
+    
     private let progressContainer: UIView = {
         let v = UIView()
         v.translatesAutoresizingMaskIntoConstraints = false
@@ -189,6 +204,7 @@ final class PlayerViewController: UIViewController {
     class ProgressModel: ObservableObject {
         @Published var position: Double = 0
         @Published var duration: Double = 1
+        @Published var highlights: [ProgressHighlight] = []
     }
     private var progressModel = ProgressModel()
     
@@ -296,6 +312,8 @@ final class PlayerViewController: UIViewController {
     private var controlsHideWorkItem: DispatchWorkItem?
     private var controlsVisible: Bool = true
     private var pendingSeekTime: Double?
+    private var introDBSegments: [IntroDBSegment] = []
+    private var activeSkipSegmentID: String?
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -399,6 +417,7 @@ final class PlayerViewController: UIViewController {
         renderer.load(url: url, with: preset, headers: headers)
         if let info = mediaInfo {
             prepareSeekToLastPosition(for: info)
+            fetchIntroDBSegments(for: info)
         }
         
         if let subs = initialSubtitles, !subs.isEmpty {
@@ -466,6 +485,7 @@ final class PlayerViewController: UIViewController {
         videoContainer.addSubview(skipForwardButton)
         videoContainer.addSubview(speedIndicatorLabel)
         videoContainer.addSubview(subtitleButton)
+        videoContainer.addSubview(skipSegmentButton)
         
         NSLayoutConstraint.activate([
             videoContainer.topAnchor.constraint(equalTo: view.topAnchor),
@@ -526,7 +546,11 @@ final class PlayerViewController: UIViewController {
             subtitleButton.trailingAnchor.constraint(equalTo: progressContainer.trailingAnchor, constant: 0),
             subtitleButton.bottomAnchor.constraint(equalTo: progressContainer.topAnchor, constant: -8),
             subtitleButton.widthAnchor.constraint(equalToConstant: 32),
-            subtitleButton.heightAnchor.constraint(equalToConstant: 32)
+            subtitleButton.heightAnchor.constraint(equalToConstant: 32),
+            
+            skipSegmentButton.trailingAnchor.constraint(equalTo: progressContainer.trailingAnchor),
+            skipSegmentButton.bottomAnchor.constraint(equalTo: progressContainer.topAnchor, constant: -14),
+            skipSegmentButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 36)
         ])
     }
     
@@ -536,6 +560,7 @@ final class PlayerViewController: UIViewController {
         pipButton.addTarget(self, action: #selector(pipTapped), for: .touchUpInside)
         skipBackwardButton.addTarget(self, action: #selector(skipBackwardTapped), for: .touchUpInside)
         skipForwardButton.addTarget(self, action: #selector(skipForwardTapped), for: .touchUpInside)
+        skipSegmentButton.addTarget(self, action: #selector(skipSegmentTapped), for: .touchUpInside)
         let tap = UITapGestureRecognizer(target: self, action: #selector(containerTapped))
         videoContainer.addGestureRecognizer(tap)
     }
@@ -856,7 +881,7 @@ final class PlayerViewController: UIViewController {
             @ObservedObject var model: ProgressModel
             var onEditingChanged: (Bool) -> Void
             var body: some View {
-                MusicProgressSlider(value: Binding(get: { model.position }, set: { model.position = $0 }), inRange: 0...max(model.duration, 1.0), activeFillColor: .white, fillColor: .white, textColor: .white.opacity(0.7), emptyColor: .white.opacity(0.3), height: 33, onEditingChanged: onEditingChanged)
+                MusicProgressSlider(value: Binding(get: { model.position }, set: { model.position = $0 }), inRange: 0...max(model.duration, 1.0), activeFillColor: .white, fillColor: .white, textColor: .white.opacity(0.7), emptyColor: .white.opacity(0.3), height: 33, highlights: model.highlights, onEditingChanged: onEditingChanged)
             }
         }
         
@@ -1016,6 +1041,13 @@ final class PlayerViewController: UIViewController {
         }
     }
     
+    @objc private func skipSegmentTapped() {
+        guard let segment = currentActiveSegment(at: cachedPosition) else { return }
+        guard let target = resolvedEnd(for: segment, duration: cachedDuration) else { return }
+        renderer.seek(to: max(0, target))
+        showControlsTemporarily()
+    }
+    
     private func showControlsTemporarily() {
         controlsHideWorkItem?.cancel()
         controlsVisible = true
@@ -1090,9 +1122,11 @@ final class PlayerViewController: UIViewController {
             self.cachedPosition = position
             if duration > 0 {
                 self.updateProgressHostingController()
+                self.updateProgressHighlights(duration: duration)
             }
             self.progressModel.position = position
             self.progressModel.duration = max(duration, 1.0)
+            self.updateActiveSkipSegment(at: position, duration: duration)
             
             if self.pipController?.isPictureInPictureActive == true {
                 self.pipController?.updatePlaybackState()
@@ -1120,6 +1154,73 @@ final class PlayerViewController: UIViewController {
         } else {
             return String(format: "%02d:%02d", m, s)
         }
+    }
+    
+    private func fetchIntroDBSegments(for mediaInfo: MediaInfo) {
+        IntroDBService.shared.fetchSegments(for: mediaInfo) { [weak self] result in
+            guard let self = self else { return }
+            
+            switch result {
+            case .success(let segments):
+                DispatchQueue.main.async {
+                    self.introDBSegments = segments
+                    self.updateProgressHighlights(duration: self.cachedDuration)
+                    self.updateActiveSkipSegment(at: self.cachedPosition, duration: self.cachedDuration)
+                }
+                Logger.shared.log("Loaded \(segments.count) IntroDB segments", type: "Info")
+            case .failure(let error):
+                Logger.shared.log("IntroDB request failed: \(error.localizedDescription)", type: "Warn")
+            }
+        }
+    }
+    
+    private func updateProgressHighlights(duration: Double) {
+        let highlights = IntroDBService.shared.highlights(for: introDBSegments, duration: duration)
+        progressModel.highlights = highlights.map {
+            ProgressHighlight(start: $0.start, end: $0.end, color: Color($0.color), label: $0.label)
+        }
+    }
+    
+    private func currentActiveSegment(at position: Double, duration: Double? = nil) -> IntroDBSegment? {
+        return IntroDBService.shared.activeSegment(at: position, in: introDBSegments, duration: duration ?? cachedDuration)
+    }
+    
+    private func updateActiveSkipSegment(at position: Double, duration: Double) {
+        let active = currentActiveSegment(at: position, duration: duration)
+        let newID = active?.id
+        guard newID != activeSkipSegmentID else { return }
+        activeSkipSegmentID = newID
+        
+        if let active {
+            showSkipButton(for: active)
+        } else {
+            hideSkipButton()
+        }
+    }
+    
+    private func showSkipButton(for segment: IntroDBSegment) {
+        let title = "Skip \(segment.db.title)"
+        skipSegmentButton.setTitle(title, for: .normal)
+        skipSegmentButton.backgroundColor = segment.db.uiColor.withAlphaComponent(0.55)
+        
+        guard skipSegmentButton.isHidden || skipSegmentButton.alpha < 1.0 else { return }
+        skipSegmentButton.isHidden = false
+        UIView.animate(withDuration: 0.2) {
+            self.skipSegmentButton.alpha = 1.0
+        }
+    }
+    
+    private func hideSkipButton() {
+        guard !skipSegmentButton.isHidden else { return }
+        UIView.animate(withDuration: 0.2, animations: {
+            self.skipSegmentButton.alpha = 0.0
+        }, completion: { _ in
+            self.skipSegmentButton.isHidden = true
+        })
+    }
+    
+    private func resolvedEnd(for segment: IntroDBSegment, duration: Double) -> Double? {
+        return segment.resolvedEnd(duration: duration)
     }
 }
 

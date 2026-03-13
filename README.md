@@ -3,7 +3,11 @@
 
 **A modular media player for iOS, tvOS and macOS, under the GPLv3.0 License.**
 
-[![Build and Release IPA](https://github.com/cranci1/Luna/actions/workflows/build.yml/badge.svg)](https://github.com/cranci1/Luna/actions/workflows/build.yml) [![Discord](https://img.shields.io/discord/1293430817841741899.svg?logo=discord&color=blue)](https://discord.gg/XR3SrmUbpd) [![Platform](https://img.shields.io/badge/Platform-iOS%20%7C%20iPadOS%2015.0%2B%20%26%20macOS%2012.0%2B-red?logo=apple&logoColor=white)](https://img.shields.io/badge/Platform-iOS%20%7C%20iPadOS%2015.0%2B%20%26%20macOS%2012.0%2B-red?logo=apple&logoColor=white)
+[![Build and Release IPA](https://github.com/cranci1/Luna/actions/workflows/build.yml/badge.svg)](https://github.com/cranci1/Luna/actions/workflows/build.yml)
+[![Discord](https://img.shields.io/discord/1293430817841741899.svg?logo=discord&color=blue)](https://discord.gg/XR3SrmUbpd)
+[![Platform](https://img.shields.io/badge/Platform-iOS%20%7C%20iPadOS%2015.0%2B%20%26%20macOS%2012.0%2B-red?logo=apple&logoColor=white)](https://img.shields.io/badge/Platform-iOS%20%7C%20iPadOS%2015.0%2B%20%26%20macOS%2012.0%2B-red?logo=apple&logoColor=white)
+[![Category](https://img.shields.io/badge/category-Entertainment-9D00FF)](https://github.com/cranci1/Luna)
+[![License](https://img.shields.io/badge/license-GPLv3-blue)](./LICENSE)
 
 </div>
 
@@ -32,6 +36,8 @@ Luna has been made to improve speed and stability over the old version, [Sora 1]
 - [x] Bookmarks & Collections for Media Items
 - [x] Support for personal media servers (Jellyfin, Emby)
 - [x] Background playback and Picture-in-Picture (PiP) support
+- [x] Services tracking for playback progresses (Trakt & AniList)
+- [x] Support for IntroDBService timestamps (intro, recap, credits, preview)
 - [x] External media player support (VLC, Infuse, Outplayer, nPlayer, SenPlayer, VidHub, TracyPlayer)
 
 ## Installation
@@ -68,7 +74,7 @@ Misc:
 This project is licensed under the [GNU General Public License v3.0](LICENSE) (GPLv3.0).
 
 ```
-Copyright © 2024-2025 cranci. All rights reserved.
+Copyright © 2024-2026 cranci. All rights reserved.
 
 Luna is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

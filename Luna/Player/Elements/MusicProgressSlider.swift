@@ -4,10 +4,18 @@
 //
 //  Created by Pratik on 08/01/23.
 //
-//  Thanks to pratikg29 for this code inside his open source project "https://github.com/pratikg29/Custom-Slider-Control?ref=iosexample.com"
+//  Thanks to pratikg29 for this code inside his open source project "https://github.com/pratikg29/Custom-Slider-Control"
 //  I did edit some of the code for my liking (added a buffer indicator, etc.)
 
 import SwiftUI
+
+struct ProgressHighlight: Identifiable {
+    let id = UUID()
+    let start: Double
+    let end: Double
+    let color: Color
+    let label: String
+}
 
 struct MusicProgressSlider<T: BinaryFloatingPoint>: View {
     @Binding var value: T
@@ -17,6 +25,7 @@ struct MusicProgressSlider<T: BinaryFloatingPoint>: View {
     let textColor: Color
     let emptyColor: Color
     let height: CGFloat
+    let highlights: [ProgressHighlight]
     let onEditingChanged: (Bool) -> Void
     
     @State private var localRealProgress: T = 0
@@ -32,6 +41,7 @@ struct MusicProgressSlider<T: BinaryFloatingPoint>: View {
         textColor: Color,
         emptyColor: Color,
         height: CGFloat,
+        highlights: [ProgressHighlight] = [],
         onEditingChanged: @escaping (Bool) -> Void
     ) {
         self._value = value
@@ -41,6 +51,7 @@ struct MusicProgressSlider<T: BinaryFloatingPoint>: View {
         self.textColor = textColor
         self.emptyColor = emptyColor
         self.height = height
+        self.highlights = highlights
         self.onEditingChanged = onEditingChanged
     }
     
@@ -54,9 +65,33 @@ struct MusicProgressSlider<T: BinaryFloatingPoint>: View {
                         ZStack(alignment: .center) {
                             Capsule()
                                 .fill(.ultraThinMaterial)
+                            
+                            if !highlights.isEmpty {
+                                Canvas { context, size in
+                                    let lower = Double(inRange.lowerBound)
+                                    let upper = Double(inRange.upperBound)
+                                    let range = max(upper - lower, 0.000001)
+                                    
+                                    for highlight in highlights {
+                                        let clampedStart = max(lower, min(highlight.start, upper))
+                                        let clampedEnd = max(lower, min(highlight.end, upper))
+                                        guard clampedEnd > clampedStart else { continue }
+                                        
+                                        let startRatio = (clampedStart - lower) / range
+                                        let endRatio = (clampedEnd - lower) / range
+                                        
+                                        let x = size.width * CGFloat(startRatio)
+                                        let width = size.width * CGFloat(endRatio - startRatio)
+                                        let rect = CGRect(x: x, y: 0, width: width, height: size.height)
+                                        context.fill(Path(rect), with: .color(highlight.color.opacity(0.7)))
+                                    }
+                                }
+                                .frame(width: bounds.size.width)
+                                .mask(Capsule())
+                            }
                         }
                         .clipShape(Capsule())
-
+                        
                         Capsule()
                             .fill(isActive ? activeFillColor : fillColor)
                             .mask({
@@ -87,7 +122,7 @@ struct MusicProgressSlider<T: BinaryFloatingPoint>: View {
             }
             .frame(width: bounds.size.width, height: bounds.size.height, alignment: .center)
             .contentShape(Rectangle())
-            #if !os(tvOS)
+#if !os(tvOS)
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .local)
                     .updating($isActive) { _, state, _ in
@@ -104,7 +139,7 @@ struct MusicProgressSlider<T: BinaryFloatingPoint>: View {
                         localTempProgress = 0
                     }
             )
-            #endif
+#endif
             .onChangeComp(of: isActive) { _, newValue in
                 value = max(min(getPrgValue(), inRange.upperBound), inRange.lowerBound)
                 onEditingChanged(newValue)
@@ -121,7 +156,7 @@ struct MusicProgressSlider<T: BinaryFloatingPoint>: View {
         }
         .frame(height: isActive ? height * 1.25 : height, alignment: .center)
     }
-        
+    
     private var animation: Animation {
         if isActive {
             return .spring()

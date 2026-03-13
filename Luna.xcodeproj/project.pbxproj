@@ -67,6 +67,7 @@
 		13E1EDF02ED9E66000087629 /* browseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13E1EDCF2ED9E65F00087629 /* browseView.swift */; };
 		13E1EDF12ED9E66000087629 /* kanzenModuleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13E1EDD02ED9E65F00087629 /* kanzenModuleView.swift */; };
 		13E1EDF42ED9E67000087629 /* ContentModel.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = 13E1EDF22ED9E67000087629 /* ContentModel.xcdatamodeld */; };
+		13EFB91F2F644F8400F9B8E4 /* IntroDBService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13EFB91E2F644F8400F9B8E4 /* IntroDBService.swift */; };
 		13F0725F2E4B2D3300EF90EB /* SoraApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13F0725E2E4B2D3300EF90EB /* SoraApp.swift */; };
 		13F072632E4B2D3700EF90EB /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13F072622E4B2D3700EF90EB /* Assets.xcassets */; };
 		13F0729B2E4B2D9200EF90EB /* ServicesEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13F0726E2E4B2D9000EF90EB /* ServicesEntity.swift */; };
@@ -188,6 +189,7 @@
 		13E1EDCF2ED9E65F00087629 /* browseView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = browseView.swift; sourceTree = "<group>"; };
 		13E1EDD02ED9E65F00087629 /* kanzenModuleView.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = kanzenModuleView.swift; sourceTree = "<group>"; };
 		13E1EDF32ED9E67000087629 /* ContentModel.xcdatamodel */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = ContentModel.xcdatamodel; sourceTree = "<group>"; };
+		13EFB91E2F644F8400F9B8E4 /* IntroDBService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = IntroDBService.swift; sourceTree = "<group>"; };
 		13F0725B2E4B2D3300EF90EB /* Luna.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Luna.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13F0725E2E4B2D3300EF90EB /* SoraApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoraApp.swift; sourceTree = "<group>"; };
 		13F072622E4B2D3700EF90EB /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -291,6 +293,7 @@
 		1375466F2E5F079000B29944 /* Progress */ = {
 			isa = PBXGroup;
 			children = (
+				13EFB91E2F644F8400F9B8E4 /* IntroDBService.swift */,
 				13B6F3442EA4C6BC00DECD2B /* ProgressManager.swift */,
 			);
 			path = Progress;
@@ -945,6 +948,7 @@
 				13F072A82E4B2D9200EF90EB /* ContentView.swift in Sources */,
 				13F072B72E4B2D9200EF90EB /* Logger.swift in Sources */,
 				13E1EDD72ED9E65F00087629 /* favouriteManager.swift in Sources */,
+				13EFB91F2F644F8400F9B8E4 /* IntroDBService.swift in Sources */,
 				13B2E5742E7597B9009F3271 /* JSController-NetworkFetch.swift in Sources */,
 				13F315B02EAD03F70025BD7A /* SubtitleLoader.swift in Sources */,
 				13F072B82E4B2D9200EF90EB /* LevenshteinDistance.swift in Sources */,
