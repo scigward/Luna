@@ -311,7 +311,9 @@ final class MPVSoftwareRenderer {
             Logger.shared.log("Primary render view is missing, mpv window embedding disabled", type: "Warn")
             return
         }
-        let pointerValue = UInt(bitPattern: Unmanaged.passUnretained(primaryRenderView).toOpaque())
+
+        let renderTarget = primaryRenderView.layer
+        let pointerValue = UInt(bitPattern: Unmanaged.passUnretained(renderTarget).toOpaque())
         let wid = Int64(bitPattern: UInt64(pointerValue))
         setOption(name: "wid", int64Value: wid)
     }
